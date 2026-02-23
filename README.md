@@ -1,6 +1,6 @@
 ![Ransomware.live Logo](.github/ransomware.live.png)
 
-# Ransomware.live
+# Ransomware.live for windows
 
 Ransomware.live is originally a fork of **ransomwatch**.
 It is a ransomware leak site monitoring tool that scrapes entries from various ransomware leak sites and publishes them.
