@@ -58,7 +58,7 @@ ransomwarelive/
 ### 1. リポジトリをクローン
 ```bash
 git clone https://github.com/focuslight-nr/ransomware.live_win.git
-cd ransomwarelive
+cd ransomware.live_win
 ```
 
 ### 2. 仮想環境の作成

@@ -57,7 +57,7 @@ ransomwarelive/
 ### 1. Clone the Repository
 ```bash
 git clone https://github.com/focuslight-nr/ransomware.live_win.git
-cd ransomwarelive
+cd ransomware.live_win
 ```
 
 ### 2. Create a Virtual Environment
