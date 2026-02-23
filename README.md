@@ -9,6 +9,8 @@ It is a ransomware leak site monitoring tool that scrapes entries from various r
 
 Ransomware.live handles **data collection, parsing, enrichment, and automation** to maintain the database.
 
+This repository contains various fixes to ensure it runs on Windows.
+
 ---
 
 ## 📌 Features
@@ -41,6 +43,7 @@ ransomwarelive/
 │   ├── status.py         # System health and process status
 │   ├── rsslib.py         # (Optional) RSS feed generation
 │   └── requirements.txt  # Python dependencies
+│   └── requirements-windows.txt  # Python dependencies for windows
 │
 ├── db/                   # Local databases (JSON)
 ├── tmp/                  # Temporary working files

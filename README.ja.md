@@ -9,6 +9,8 @@ Ransomware.live は、元々 **ransomwatch** のフォークです。
 
 Ransomware.live は、データベースを維持するために、**データ収集、解析、エンリッチメント、自動化**を処理します。
 
+このリポジトリはwindows上で動作するように各種修正を行ったものです。
+
 ---
 
 ## 📌 主な機能
@@ -41,6 +43,7 @@ ransomwarelive/
 │   ├── status.py         # システムヘルスとプロセスステータス
 │   ├── rsslib.py         # (オプション) RSSフィード生成
 │   └── requirements.txt  # Pythonの依存関係
+│   └── requirements-windows.txt  # Pythonの依存関係(windows環境特価)
 │
 ├── images/               # 静的アセットとウォーターマーク
 ├── db/                   # ローカルデータベース (JSON)
