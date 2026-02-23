@@ -492,6 +492,23 @@ def clean_slug(url):
     except:
         return url
 
+def sanitize_filename(name):
+    """
+    Sanitize a string to be used as a filename.
+    Removes or replaces characters that are not allowed in filenames.
+    """
+    return re.sub(r'[<>:"/\\|?*]', '_', name)
+
+def safe_slug(name: str) -> str:
+    """
+    Create a safe slug from a string (lowercase, spaces to hyphens, remove special chars).
+    Used for image and favicon filenames to stay consistent with libcapture.
+    """
+    s = re.sub(r"\s+", "-", name.strip().lower())
+    s = re.sub(r"[^a-z0-9\-._]+", "-", s)
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+    return s or "unknown"
+
 async def victim_screenshot(post_url, group_name, victim):
     """
     Handles the Playwright browser and calls the screenshot function.

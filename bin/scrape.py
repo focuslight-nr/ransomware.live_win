@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 import os
 import argparse
 import sys
-from shared_utils import get_current_timestamp, is_file_older_than, stdlog, errlog
+from shared_utils import get_current_timestamp, is_file_older_than, stdlog, errlog, sanitize_filename, safe_slug
 from playwright.async_api import async_playwright
 import socket
 if sys.platform != 'win32':
@@ -355,6 +355,7 @@ async def fetch_html_via_tor(url: str) -> str:
 # -------------------- SCRAPER --------------------
 async def scrape_group(context, group, bypass_enabled_flag, verbose):
     group_name = group["name"]
+    safe_group_name = sanitize_filename(group_name)
     special_path = group_name.lower() in {g.lower() for g in SPECIAL_HTML_FETCH_GROUPS}
 
     for location in group["locations"]:
@@ -362,7 +363,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
         if bypass_enabled_flag or location["enabled"]:
             md5_slug = hashlib.md5(slug.encode()).hexdigest()
-            filename = tmp_dir / f"{group_name}-{md5_slug}.html"
+            filename = tmp_dir / f"{safe_group_name}-{md5_slug}.html"
 
             if is_file_older_than(filename, 60):
                 page = None
@@ -424,7 +425,8 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
                     # Screenshot / capture
                     hash_slug = hashlib.md5(slug.encode()).hexdigest()
-                    image_path = f"{img_dir}/groups/{group_name}-{hash_slug}.png"
+                    group_slug = safe_slug(group_name)
+                    image_path = f"{img_dir}/groups/{group_slug}-{hash_slug}.png"
                     if not Path(image_path).exists() or is_file_older_than(image_path, 10080):
                         # If you still want a screenshot from browser for non-special groups, keep page logic above.
                         # For both paths we’ll delegate to your capture lib which handles its own logic.
@@ -435,7 +437,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             errlog(f"[{group_name}] capture_group failed: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
 
                     # Favicon
-                    favicon_path = f"{img_dir}/groups/favicons/{group_name}-{hash_slug}.png"
+                    favicon_path = f"{img_dir}/groups/favicons/{group_slug}-{hash_slug}.png"
                     if not Path(favicon_path).exists() or is_file_older_than(favicon_path, 10080):
                         if special_path:
                             await download_favicon_from_url(slug, favicon_path)
