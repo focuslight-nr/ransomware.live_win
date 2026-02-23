@@ -9,6 +9,7 @@
 """
 
 import os,datetime,sys,re
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
@@ -43,7 +44,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup = BeautifulSoup(file, "html.parser")
                 ##divs_name = soup.find_all('div', {"class": "col-lg-4 col-sm-6 mb-4"})
                 # Loop through each item box and extract the required information
@@ -77,11 +78,12 @@ def main():
                     
                     # Extract the post URL
                     post_url_tag = box.find("a", class_="learn_more")
-                    post_url = post_url_tag['href'].strip() 
+                    post_url = post_url_tag['href'].strip() if post_url_tag else ""
                     if post_url:
                         site = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))
-                        site = "http://ijzn3sicrcy7guixkzjkib4ukbiilwc3xhnmby4mcbccnsd7j2rekvqd.onion"
-                        post_url = site + post_url
+                        if not site:
+                            site = "http://ijzn3sicrcy7guixkzjkib4ukbiilwc3xhnmby4mcbccnsd7j2rekvqd.onion"
+                        post_url = urljoin(site + '/', post_url)
                     else:
                         post_url = ""
                     

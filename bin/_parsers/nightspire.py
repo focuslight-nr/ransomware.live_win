@@ -45,7 +45,7 @@ def main():
             if filename.startswith(group_name+'-'):
                 html_doc=tmp_dir / filename
                 print('*** ', html_doc)
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 for company in soup.find_all(class_='company-item'):
                     description = company.find(class_='name').text.strip()

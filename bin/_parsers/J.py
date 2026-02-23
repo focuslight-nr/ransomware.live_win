@@ -1,4 +1,7 @@
-import os, datetime, sys, re
+import os
+from urllib.parse import urljoin
+import sys
+import re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
@@ -34,7 +37,7 @@ def main():
 
                         victim = link_tag.text.strip() if link_tag else "N/A"
                         post_url = link_tag.get("href") if link_tag else "N/A"
-                        post_url = "http://twniiyed6mydtbe64i5mdl56nihl7atfaqtpww6gqyaiohgc75apzpad.onion" + post_url
+                        post_url = urljoin("http://twniiyed6mydtbe64i5mdl56nihl7atfaqtpww6gqyaiohgc75apzpad.onion", post_url)
 
                         published = time_tag.get("datetime") if time_tag else ""
                         if published:

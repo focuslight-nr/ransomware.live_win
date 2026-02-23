@@ -44,7 +44,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 victims_div = soup.find("div", class_="row bg-secondary p-3 rounded-4 roboto")
                 for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):

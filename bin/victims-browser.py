@@ -7,9 +7,17 @@ import os
 import sys
 import subprocess
 from datetime import datetime 
+from pathlib import Path
+from dotenv import load_dotenv
 
-VICTIMS_FILE = '../db/victims.json'
-LOCK_FILE = '../tmp/parse.lock'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, '..', '.env')
+load_dotenv(dotenv_path=env_path)
+HUDSONROCK_ENABLED = os.getenv('HUDSONROCK_ENABLED', 'false').lower() == 'true' 
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+VICTIMS_FILE = os.path.join(script_dir, '..', 'db', 'victims.json')
+LOCK_FILE = os.path.join(script_dir, '..', 'tmp', 'parse.lock')
 
 MODE_LIST = 0
 MODE_DETAIL = 1
@@ -23,6 +31,8 @@ ACTIVITY_OPTIONS = [
 ]
 
 def load_victims():
+    if not os.path.exists(VICTIMS_FILE):
+        return []
     with open(VICTIMS_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
     return list(reversed(data))
@@ -310,8 +320,9 @@ def main(stdscr):
                 filters = {'empty_website': False, 'empty_country': False, 'empty_activity': False}
                 current_idx = 0
             elif key == ord('I'):
-                website = victims[current_idx].get('website', '')
-                launch_manage(stdscr, website)
+                if HUDSONROCK_ENABLED:
+                    website = victims[current_idx].get('website', '')
+                    launch_manage(stdscr, website)
             elif key == curses.KEY_ENTER or key == 10:
                 mode = MODE_DETAIL
                 detail_idx = 4

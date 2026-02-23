@@ -1,76 +1,97 @@
-import os, sys
-import urllib3
-import requests
+"""
+    Upgraded API Parser for Crypto24
+"""
+
+import os
 import json
+import requests
+import urllib3
 import pycountry
-from datetime import datetime
-from shared_utils import appender
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
-onion_url = 'http://j5o5y2feotmhvr7cbcp2j2ewayv5mn5zenl3joqwx67gtfchhezjznad.onion/api/data?page=1'
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
+target_group_name = "crypto24"
+api_endpoint_suffix = "api/data?page=1"
+
+# Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://localhost:9050',
-    'https': 'socks5h://localhost:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-headers = {
-    "Host": "j5o5y2feotmhvr7cbcp2j2ewayv5mn5zenl3joqwx67gtfchhezjznad.onion",
-    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
-    "Accept": "application/json",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate",
-    "Referer": "http://j5o5y2feotmhvr7cbcp2j2ewayv5mn5zenl3joqwx67gtfchhezjznad.onion/",
-    "Connection": "keep-alive",
-    #"If-None-Match": 'W/"ce2-l4dUcvpqzE7te+sHecTbsdO7Gsk"',
-    "Priority": "u=4"
-}
-
-def fetch_json_from_onion_url(url):
+def get_base_urls():
     try:
-        response = requests.get(url, headers=headers, proxies=proxies, verify=False, timeout=30)
-        #print(f"Status code: {response.status_code}")
-        #print(f"Response headers: {response.headers}")
-        #print(f"Raw response text (first 500 chars):\n{response.text[:500]}")
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print("Error:", e)
-        return None
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def convert_country_to_code(country_name):
     try:
         country = pycountry.countries.lookup(country_name)
         return country.alpha_2
-    except LookupError:
-        return ""  # Unknown
+    except:
+        return ""
 
 def main():
-    json_data = fetch_json_from_onion_url(onion_url)
-    if json_data and "items" in json_data:
-        for item in json_data["items"]:
-            company = item.get('company', '').strip()
-            domain = item.get('domain', '').strip()
-            size = item.get('size', '').strip()
-            comment = item.get('comment', '').strip()
-            country = item.get('country', '').strip()
-            published = item.get('time', '')[:10]  # format: YYYY-MM-DD
-            country_code = convert_country_to_code(country) if country else item.get('code', '')
-            
-            extra_infos = {
-                'size': size
-            }
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://j5o5y2feotmhvr7cbcp2j2ewayv5mn5zenl3joqwx67gtfchhezjznad.onion']
 
-            print(f"[+] {company} ({domain}) - {country_code} - {published}")
-            appender(company, 'crypto24', comment, domain, published, '', country_code, extra_infos)
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        headers = {
+            "Host": base_url.split('//')[-1].split(':')[0],
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Referer": base_url + '/'
+        }
+
+        try:
+            response = requests.get(full_api_url, headers=headers, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                json_data = response.json()
+                if "items" in json_data:
+                    for item in json_data["items"]:
+                        company = item.get('company', '').strip()
+                        domain = item.get('domain', '').strip()
+                        comment = item.get('comment', '').strip()
+                        country = item.get('country', '').strip()
+                        published = item.get('time', '')[:10]
+                        country_code = convert_country_to_code(country) if country else item.get('code', '')
+                        extra_infos = { 'size': item.get('size', '') }
+                        
+                        appender(company, target_group_name, comment, domain, published, '', country_code, extra_infos)
+                    return # Success
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Request failed for {full_api_url}: {e}")
 
 if __name__ == "__main__":
     main()

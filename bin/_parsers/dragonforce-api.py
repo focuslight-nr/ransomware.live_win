@@ -1,77 +1,88 @@
 """
-    From Template v3 - 20240807
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="")
+    Upgraded API Parser for DragonForce
 """
 
-import os,datetime,sys
-from datetime import datetime
-import requests
-import socks
+import os
 import json
+import requests
 import urllib3
+from pathlib import Path
+from dotenv import load_dotenv
+from urllib.parse import urljoin
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
-#env_path = Path("../.env")
-#load_dotenv(dotenv_path=env_path)
-#home = os.getenv("RANSOMWARELIVE_HOME")
-#tmp_dir = Path(home + os.getenv("TMP_DIR"))
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
 
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog, openjson
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
-
-onion_url= 'http://z3wqggtxft7id3ibr7srivv5gjof5fwg76slewnzwwakjuf3nlhukdid.onion/api/guest/blog/posts?page=1'
+target_group_name = "dragon force"
+api_endpoint_suffix = "api/guest/blog/posts?page=1"
 
 # Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Assuming Tor is running on default port 9050.
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://localhost:9050',
-    'https': 'socks5h://localhost:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-# Function to convert date format
-def convert_date_format(date_str):
-    # Parse the original date string to a datetime object
-    original_format = "%Y-%m-%dT%H:%M:%S.%fZ"
-    datetime_obj = datetime.strptime(date_str, original_format)
-    # Convert the datetime object to the desired string format
-    new_format = "%Y-%m-%d %H:%M:%S.%f"
-    return datetime_obj.strftime(new_format)
-
-def fetch_json_from_onion_url(onion_url):
+def get_base_urls():
     try:
-        response = requests.get(onion_url, proxies=proxies,verify=False)
-        response.raise_for_status()  # Check for any HTTP errors
-        json_data = response.json()
-        return json_data
-    except requests.exceptions.RequestException as e:
-        print("Error:", e)
-        return None
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
-    # Assuming the response contains JSON data, parse it
-    #json_data = response.json()
-    #json_data = openjson('/tmp/dragon.json')
-    #return json_data
+def convert_date_format(date_str):
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    except:
+        return date_str
 
 def main():
-    try:
-        json_data = fetch_json_from_onion_url(onion_url)
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://z3wqggtxft7id3ibr7srivv5gjof5fwg76slewnzwwakjuf3nlhukdid.onion']
 
-        if json_data and 'data' in json_data and 'publications' in json_data['data']:
-            publications = json_data['data']['publications']
-            for publication in publications:
-                publication_date = convert_date_format(publication['created_at'])
-                victim = publication['name']
-                website = publication.get('website', '')
-                description = publication.get('description', '')
-                uuid = publication.get('uuid', '')
-                link = f"http://z3wqggtxft7id3ibr7srivv5gjof5fwg76slewnzwwakjuf3nlhukdid.onion/blog/?post_uuid={uuid}"
-                appender(victim, 'dragonforce', description, website, publication_date, link)
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                json_data = response.json()
+                if json_data and 'data' in json_data and 'publications' in json_data['data']:
+                    publications = json_data['data']['publications']
+                    for pub in publications:
+                        victim = pub.get('name', 'Unknown')
+                        description = pub.get('description', '')
+                        website = pub.get('website', '')
+                        published = convert_date_format(pub.get('created_at', ''))
+                        post_url = urljoin(base_url + '/', f"blog/?post_uuid={pub.get('uuid', '')}")
+                        
+                        appender(victim, target_group_name, description, website, published, post_url)
+                    return
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"DragonForce API Error for {base_url}: {e}")
 
-    except Exception as e:
-        errlog('dragonforce - parsing fail with error: ' + str(e))
+if __name__ == "__main__":
+    main()

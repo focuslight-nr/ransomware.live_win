@@ -10,12 +10,19 @@ from PIL import Image, ImageFilter
 from playwright.async_api import async_playwright
 import shared_utils
 import cv2  # OpenCV
+from dotenv import load_dotenv
+
+# Load environment variables from ../.env
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+home = os.getenv("RANSOMWARELIVE_HOME", ".")
 
 # ----- FIXED CONFIG -----
-TOR_PROXY = "socks5://127.0.0.1:9050"
-VICTIM_OUTPUT_DIR = "/opt/ransomwarelive/images/victims"
-GROUP_OUTPUT_DIR = "/opt/ransomwarelive/images/groups"
-WATERMARK_PATH = Path("/opt/ransomwarelive/images/ransomwarelive.png")
+TOR_PROXY = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+VICTIM_OUTPUT_DIR = os.path.join(home, os.getenv("IMAGES_DIR", "images").strip("/"), "victims")
+GROUP_OUTPUT_DIR = os.path.join(home, os.getenv("IMAGES_DIR", "images").strip("/"), "groups")
+WATERMARK_PATH = Path(os.path.join(home, os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")))
 VIEWPORT_WIDTH = 1280
 VIEWPORT_HEIGHT = 1000
 OVERLAP = 100  # px
@@ -23,7 +30,8 @@ OVERLAP = 100  # px
 blur_gang = ['pear', 'qilin', 'rhysida']
 networkidle_gang = ['incransom']
 GROUPS_JSON_PATH = os.path.join(os.path.dirname(__file__), "../db/groups.json")
-HAAR_CASCADE_PATH = "/opt/ransomwarelive/etc/haarcascade_frontalface_default.xml"
+HAAR_CASCADE_PATH = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+USE_WATERMARK = os.getenv('USE_WATERMARK', 'true').lower() == 'true'
 # -------------------------
 
 # Default OUTPUT_DIR for victims (keeps capture_victim behavior unchanged)
@@ -84,9 +92,6 @@ def blur_image(img_path: str, radius: int = 5):
     blurred.save(img_path)
 
 def detect_faces_and_blur(img_path: str) -> bool:
-    if not os.path.exists(HAAR_CASCADE_PATH):
-        print(f"[WARN] Haar cascade not found: {HAAR_CASCADE_PATH}")
-        return False
     face_cascade = cv2.CascadeClassifier(HAAR_CASCADE_PATH)
     img = cv2.imread(img_path)
     if img is None:
@@ -94,7 +99,7 @@ def detect_faces_and_blur(img_path: str) -> bool:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
     if len(faces) > 0:
-        print(f"[✓] Detected {len(faces)} face(s) → blurring...")
+        print(f"[+] Detected {len(faces)} face(s) -> blurring...")
         blur_image(img_path)
         return True
     return False
@@ -179,8 +184,8 @@ async def screenshot_onion(url: str) -> str:
     else:
         detect_faces_and_blur(final_path)
 
-    if WATERMARK_PATH.exists() and os.path.exists(final_path):
-        shared_utils.add_watermark(final_path, WATERMARK_PATH)
+    if USE_WATERMARK and os.path.exists(final_path):
+        shared_utils.add_watermark(final_path)
 
     return final_path
 
@@ -259,8 +264,8 @@ async def screenshot_onion_with_path(url: str, final_path: str) -> str:
     else:
         detect_faces_and_blur(final_path)
 
-    if WATERMARK_PATH.exists() and os.path.exists(final_path):
-        shared_utils.add_watermark(final_path, WATERMARK_PATH)
+    if USE_WATERMARK and os.path.exists(final_path):
+        shared_utils.add_watermark(final_path)
 
     return final_path
 

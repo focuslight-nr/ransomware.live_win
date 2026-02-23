@@ -38,7 +38,7 @@ def main():
         try:
             if filename.startswith('ciphbit-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 h2_elements = soup.find_all('h2')
                 for h2 in h2_elements:

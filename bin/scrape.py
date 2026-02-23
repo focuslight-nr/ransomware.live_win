@@ -15,13 +15,15 @@ import sys
 from shared_utils import get_current_timestamp, is_file_older_than, stdlog, errlog
 from playwright.async_api import async_playwright
 import socket
-import fcntl  # Works on Unix-based systems
+if sys.platform != 'win32':
+    import fcntl  # Works on Unix-based systems
 import time
 import base64
 import psutil
 import ssl
 import re
 import requests
+import subprocess
 from urllib.parse import urljoin, urlparse
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -31,18 +33,27 @@ from libcapture import capture_group
 
 # -------------------- CONFIG OVERRIDES --------------------
 # Any group name in this set will be scraped via simple Tor HTTP (requests)
-SPECIAL_HTML_FETCH_GROUPS = {"interlock", "worldleaks"}  # extend as needed, e.g., {"interlock", "examplegroup"}
+SPECIAL_HTML_FETCH_GROUPS = {"interlock"}  # extend as needed, e.g., {"interlock", "examplegroup"}
 
 # -------------------- ENV LOADING --------------------
-env_path = Path("../.env")
+script_dir = Path(__file__).resolve().parent
+env_path = script_dir.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home = os.getenv("RANSOMWARELIVE_HOME")
-db_dir = Path(home + os.getenv("DB_DIR"))
-img_dir = Path(home + os.getenv("IMAGES_DIR"))
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
-watermark = Path(home + os.getenv("WATERMARK_IMAGE_PATH"))
+home = os.getenv("RANSOMWARELIVE_HOME", ".")
+db_dir = Path(home + os.getenv("DB_DIR", "/db/"))
+img_dir = Path(home + os.getenv("IMAGES_DIR", "/images/"))
+tmp_dir = Path(home + os.getenv("TMP_DIR", "/tmp/"))
+watermark = Path(home + os.getenv("WATERMARK_IMAGE_PATH", "/images/ransomwarelive.png"))
 TOR_PWD = os.getenv("TOR_PASSWORD")
+TOR_AUTO_MANAGE = os.getenv("TOR_AUTO_MANAGE", "false").strip().lower() == "true"
+TOR_BINARY_PATH = os.getenv("TOR_BINARY_PATH", "tor")
+TOR_TORRC_PATH = os.getenv("TOR_TORRC_PATH")
+SCRAPE_CONCURRENCY = int(os.getenv("SCRAPE_CONCURRENCY", "1"))
+
+stdlog(f"Tor Auto-Manage: {TOR_AUTO_MANAGE}")
+if TOR_AUTO_MANAGE:
+    stdlog(f"Tor Binary: {TOR_BINARY_PATH}")
 
 proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")  # Default to Tor proxy
 
@@ -78,7 +89,7 @@ async def download_favicon(page, save_path):
                 stdlog(f"Base64-encoded favicon saved at {save_path}")
                 return True
             except Exception as e:
-                errlog(f"Error decoding Base64 favicon: {str(e).splitlines()[0]}")
+                errlog(f"Error decoding Base64 favicon: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
                 return False
         else:
             connector = ProxyConnector.from_url("socks5://127.0.0.1:9050")
@@ -105,7 +116,7 @@ async def download_favicon(page, save_path):
             return False
 
     except Exception as e:
-        errlog(f"Error downloading favicon: {str(e).splitlines()[0]}")
+        errlog(f"Error downloading favicon: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
         return False
 
 # -------------------- FAVICON (special path helper) --------------------
@@ -135,7 +146,7 @@ async def download_favicon_from_url(page_url: str, save_path: str) -> bool:
                         return True
         return False
     except Exception as e:
-        errlog(f"Favicon fallback failed for {page_url}: {str(e).splitlines()[0]}")
+        errlog(f"Favicon fallback failed for {page_url}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
         return False
 
 # -------------------- TOR CONTROL --------------------
@@ -160,6 +171,91 @@ def restart_tor_control_port(control_port=9051, password=None):
     except Exception as e:
         errlog(f"Error: {e}")
         exit()
+
+# -------------------- MANAGED TOR --------------------
+managed_tor_process = None
+
+def start_managed_tor():
+    global managed_tor_process
+    if TOR_AUTO_MANAGE:
+        stdlog(f"Starting managed Tor process: {TOR_BINARY_PATH}")
+        try:
+            creation_flags = 0
+            if sys.platform == 'win32':
+                creation_flags = subprocess.CREATE_NO_WINDOW
+            
+            # Extract port from proxy_address (e.g., socks5://127.0.0.1:9050)
+            socks_port = "9050"
+            if ":" in proxy_address:
+                socks_port = proxy_address.split(":")[-1]
+
+            cmd = [TOR_BINARY_PATH]
+            if TOR_TORRC_PATH:
+                cmd.extend(["-f", TOR_TORRC_PATH])
+            cmd.extend(["--ControlPort", "9051", "--SocksPort", socks_port])
+
+            managed_tor_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creation_flags
+            )
+            
+            # Wait for Tor to initialize
+            max_retries = 30
+            for i in range(max_retries):
+                if managed_tor_process.poll() is not None:
+                    raise Exception(f"Tor process exited unexpectedly with code {managed_tor_process.poll()}")
+                
+                # Check if SOCKS port is open
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    result = sock.connect_ex(('127.0.0.1', int(socks_port)))
+                    if result == 0:
+                        # Port is open, now check if Tor is actually bootstrapped via ControlPort
+                        try:
+                            with socket.create_connection(("127.0.0.1", 9051)) as s:
+                                if TOR_PWD:
+                                    s.sendall(f"AUTHENTICATE \"{TOR_PWD}\"\r\n".encode())
+                                else:
+                                    s.sendall(b"AUTHENTICATE\r\n")
+                                s.recv(1024)
+                                
+                                s.sendall(b"GETINFO status/bootstrap-phase\r\n")
+                                response = s.recv(1024).decode()
+                                if "PROGRESS=100" in response:
+                                    stdlog(f"Tor is fully bootstrapped and ready on SOCKS port {socks_port}")
+                                    # Cool-down period to let circuits stabilize
+                                    time.sleep(5)
+                                    return
+                                else:
+                                    if i % 5 == 0:
+                                        stdlog("Tor port is open, waiting for network bootstrap (100%)...")
+                        except Exception:
+                            # Control port might not be ready yet
+                            pass
+                
+                if i % 5 == 0 and i > 0:
+                    stdlog("Waiting for Tor to initialize...")
+                time.sleep(1)
+            
+            raise Exception("Timeout waiting for Tor to initialize")
+            
+        except Exception as e:
+            errlog(f"Failed to start managed Tor: {e}")
+            if managed_tor_process:
+                managed_tor_process.kill()
+            sys.exit(1)
+
+def stop_managed_tor():
+    global managed_tor_process
+    if managed_tor_process:
+        stdlog("Stopping managed Tor process...")
+        managed_tor_process.terminate()
+        try:
+            managed_tor_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            managed_tor_process.kill()
+        managed_tor_process = None
 
 # -------------------- LOCKING --------------------
 lock_file_path = tmp_dir / "scrape.lock"
@@ -187,7 +283,8 @@ def acquire_lock():
 
     lock_file = open(lock_file_path, "w")
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if sys.platform != 'win32':
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         lock_file.write(f"PID: {os.getpid()}\n")
         lock_file.flush()
         return lock_file
@@ -197,7 +294,8 @@ def acquire_lock():
 
 def release_lock(lock_file):
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        if sys.platform != 'win32':
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
         lock_file.close()
     except Exception as e:
         errlog(f"Error releasing lock: {e}")
@@ -246,7 +344,7 @@ def scrape_onion_text(url: str) -> str:
         "Accept-Language": "en-US,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
-    resp = requests.get(url, proxies=proxies, headers=headers, verify=False, timeout=45)
+    resp = requests.get(url, proxies=proxies, headers=headers, verify=False, timeout=120)
     resp.raise_for_status()
     return resp.text
 
@@ -284,10 +382,27 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     else:
                         # ---- DEFAULT: Playwright path ----
                         page = await context.new_page()
-                        await page.goto(slug, timeout=60000)
+                        # Increased timeout to 180s for Tor stability
+                        try:
+                            await page.goto(slug, wait_until="load", timeout=180000)
+                        except Exception as e:
+                            stdlog(f"[{group_name}] goto timed out or failed, but trying to save what we have: {str(e).splitlines()[0]}")
+
+                        try:
+                            # Try to wait for network to be idle, but don't fail if it takes too long
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                        except:
+                            pass
+                        
                         await page.mouse.move(x=500, y=400)
                         await page.mouse.wheel(delta_y=2000, delta_x=0)
-                        await page.wait_for_timeout(60000)
+                        # A bit more fixed wait for slow JS rendering
+                        if group_name.lower() == "worldleaks":
+                            stdlog(f"[{group_name}] Waiting 30s for Angular to render...")
+                            await asyncio.sleep(30)
+                        else:
+                            await asyncio.sleep(10)
+                        
                         content = await page.content()
                         title = await page.title()
                         if verbose:
@@ -317,7 +432,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             #capture_group(slug)  # fixed undefined variable (was post_url)
                             await _run_capture_group(slug)
                         except Exception as e:
-                            errlog(f"[{group_name}] capture_group failed: {str(e).splitlines()[0]}")
+                            errlog(f"[{group_name}] capture_group failed: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
 
                     # Favicon
                     favicon_path = f"{img_dir}/groups/favicons/{group_name}-{hash_slug}.png"
@@ -334,7 +449,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                         "available": False,
                         "lastscrape": now,
                     })
-                    errlog(f"[{group_name}] Error scraping {slug}: {str(e).splitlines()[0]}")
+                    errlog(f"[{group_name}] Error scraping {slug}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
                     # Disable location if offline for more than the threshold days
                     days = 30
                     if offline_for_more_than(location.get("updated", now), days):
@@ -363,7 +478,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     if verbose and not http_meta.get("error"):
                         stdlog(f"[{group_name}] Header fingerprint: {location['http']['fingerprint']}")
                 except Exception as e:
-                    errlog(f"[{group_name}] header fingerprint failed for {slug}: {str(e).splitlines()[0]}")
+                    errlog(f"[{group_name}] header fingerprint failed for {slug}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
                 
             else:
                 if verbose:
@@ -371,7 +486,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
 async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
     async with async_playwright() as p:
-        browser = await p.firefox.launch(
+        browser = await p.chromium.launch(
             proxy={"server": proxy_address},
             headless=True
         )
@@ -395,7 +510,20 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
         else:
             groups_to_scrape = all_groups
 
-        tasks = [scrape_group(context, group, bypass_enabled_flag, verbose) for group in groups_to_scrape]
+        # Concurrency control using Semaphore
+        semaphore = asyncio.Semaphore(SCRAPE_CONCURRENCY)
+
+        async def sem_scrape(group, index):
+            async with semaphore:
+                stdlog(f"[{index}/{len(groups_to_scrape)}] Starting scrape for group: {group['name']}")
+                try:
+                    await scrape_group(context, group, bypass_enabled_flag, verbose)
+                except Exception as e:
+                    errlog(f"Fatal error scraping group {group['name']}: {e}")
+                # Short pause between groups to let Tor circuits breathe
+                await asyncio.sleep(2)
+
+        tasks = [sem_scrape(group, i) for i, group in enumerate(groups_to_scrape, start=1)]
         await asyncio.gather(*tasks)
 
         # Update original data
@@ -446,7 +574,7 @@ async def _tiny_get(session: aiohttp.ClientSession, url: str):
         url,
         headers={"Range": "bytes=0-0"},
         allow_redirects=False,
-        timeout=45,
+        timeout=120,
         ssl=False  # we'll already run via Tor; also many .onion are http
     )
 
@@ -458,7 +586,11 @@ async def fetch_headers_via_tor(url: str, max_redirects: int = 5) -> Dict[str, A
     - normalized headers
     - extracted fingerprint fields
     """
-    connector = ProxyConnector.from_url("socks5://127.0.0.1:9050")
+    try:
+        connector = ProxyConnector.from_url(proxy_address)
+    except:
+        connector = ProxyConnector.from_url("socks5://127.0.0.1:9050")
+
     result: Dict[str, Any] = {
         "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "start_url": url,
@@ -479,7 +611,7 @@ async def fetch_headers_via_tor(url: str, max_redirects: int = 5) -> Dict[str, A
             while True:
                 # Prefer HEAD
                 try:
-                    resp = await session.head(current, allow_redirects=False, timeout=45, ssl=False)
+                    resp = await session.head(current, allow_redirects=False, timeout=120, ssl=False)
                 except aiohttp.ClientResponseError as cre:
                     # Some servers actively reject HEAD with a 4xx; fall back to tiny GET
                     resp = await _tiny_get(session, current)
@@ -508,29 +640,34 @@ async def fetch_headers_via_tor(url: str, max_redirects: int = 5) -> Dict[str, A
                 result["final_url"] = str(resp.url)
                 result["status"] = status
                 result["http_version"] = http_ver
-                result["headers"] = headers
+                
+                try:
+                    result["headers"] = headers
+                    # Extract useful fields
+                    fp = {
+                        "server": headers.get("server"),
+                        "x_powered_by": headers.get("x-powered-by"),
+                        "via": headers.get("via"),
+                        "cdn": headers.get("cf-ray") or headers.get("x-amz-cf-id") or headers.get("x-akamai-transformed"),
+                        "content_type": headers.get("content-type"),
+                        "content_length": headers.get("content-length"),
+                        "set_cookie_present": "set-cookie" in headers,
+                        "security_headers": {h: headers[h] for h in INTERESTING_SECURITY_HEADERS if h in headers},
+                    }
+                    result["fingerprint"] = fp
+                except Exception:
+                    result["fingerprint"] = {}
 
-                # Extract useful fields
-                fp = {
-                    "server": headers.get("server"),
-                    "x_powered_by": headers.get("x-powered-by"),
-                    "via": headers.get("via"),
-                    "cdn": headers.get("cf-ray") or headers.get("x-amz-cf-id") or headers.get("x-akamai-transformed"),
-                    "content_type": headers.get("content-type"),
-                    "content_length": headers.get("content-length"),
-                    "set_cookie_present": "set-cookie" in headers,
-                    "security_headers": {h: headers[h] for h in INTERESTING_SECURITY_HEADERS if h in headers},
-                }
-                result["fingerprint"] = fp
                 # Drain response body if tiny GET to avoid warnings
                 try:
-                    await resp.read()
+                    if resp:
+                        await resp.read()
                 except Exception:
                     pass
                 break
 
     except Exception as e:
-        result["error"] = str(e).splitlines()[0]
+        result["error"] = str(e).splitlines()[0] if str(e).splitlines() else str(e)
 
     return result
 
@@ -547,7 +684,7 @@ if __name__ == "__main__":
       | |   \___/   | |                      | |   \___/   | |
       | |___     ___| |                      | |___________| |
       |_____|\_/|_____|                      |_______________|
-        _|__|/ \|_|_.............💔.............._|________|_
+        _|__|/ \|_|_.............X.............._|________|_
        / ********** \                          / ********** \ 
      /  ************  \   ransomware.live     /  ************  \ 
     --------------------                    --------------------
@@ -570,9 +707,14 @@ if __name__ == "__main__":
         lock_file = acquire_lock()
 
     try:
-        restart_tor_control_port(password=TOR_PWD)
+        if TOR_AUTO_MANAGE:
+            start_managed_tor()
+        else:
+            restart_tor_control_port(password=TOR_PWD)
         asyncio.run(scrape_pages(args.group, args.bypass, args.verbose))
     finally:
+        if TOR_AUTO_MANAGE:
+            stop_managed_tor()
         if lock_file:
             release_lock(lock_file)
         end_time = time.time()

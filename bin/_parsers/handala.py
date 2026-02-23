@@ -25,7 +25,7 @@ def main():
         try:
             if filename.startswith('handala-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 posts = soup.find_all('li', class_='wp-block-post')
                 for post in posts:

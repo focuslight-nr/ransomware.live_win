@@ -1,90 +1,92 @@
 """
-    From Template v3 - 20240807
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="")
+    Upgraded API Parser for Morpheus
 """
 
-import os,datetime,sys, re
-from datetime import datetime
-import requests
-import socks
+import os
 import json
+import requests
 import urllib3
-from urllib.parse import urlparse
+import re
+from pathlib import Path
+from dotenv import load_dotenv
+from urllib.parse import urljoin, urlparse
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
-#env_path = Path("../.env")
-#load_dotenv(dotenv_path=env_path)
-#home = os.getenv("RANSOMWARELIVE_HOME")
-#tmp_dir = Path(home + os.getenv("TMP_DIR"))
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
 
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog, openjson
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
-
-onion_url= 'http://izsp6ipui4ctgxfugbgtu65kzefrucltyfpbxplmfybl5swiadpljmyd.onion/intrumpwetrust/api/posts?page=1&perPage=15'
+target_group_name = "morpheus"
+api_endpoint_suffix = "intrumpwetrust/api/posts?page=1&perPage=50"
 
 # Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Assuming Tor is running on default port 9050.
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://localhost:9050',
-    'https': 'socks5h://localhost:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-
-def fetch_json_from_onion_url(onion_url):
+def get_base_urls():
     try:
-        response = requests.get(onion_url, proxies=proxies,verify=False)
-        response.raise_for_status()  # Check for any HTTP errors
-    except requests.exceptions.RequestException as e:
-        errlog("Error:", e)
-        return None
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
-    # Assuming the response contains JSON data, parse it
-    json_data = response.json()
-    #json_data = openjson('/tmp/dragon.json')
-    return json_data
-
-        
-def extract_website(first_line):
-    """Extract a website URL from the first line of text if present."""
-    match = re.search(r'(https?://[^\s]+|www\.[^\s]+)', first_line)
-    return match.group(0) if match else ""
-
-def transform_date(date_str):
-    """Transform the date to %Y-%m-%d %H:%M:%S.%f format."""
-    try:
-        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))  # Handle ISO8601 format
-        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-    except ValueError:
-        return "Invalid date"
-
-def extract_fqdn(website_url):
-    """Extract the FQDN (Fully Qualified Domain Name) from the URL."""
-    if website_url.startswith("www."):
-        website_url = "http://" + website_url  # Add scheme to parse "www." URLs
-    parsed_url = urlparse(website_url)
-    return parsed_url.netloc if parsed_url.netloc else ""
+def extract_website(text):
+    match = re.search(r'(https?://[^\s]+|www\.[^\s]+)', text)
+    if match:
+        url = match.group(0)
+        if url.startswith("www."): url = "http://" + url
+        return urlparse(url).netloc
+    return ""
 
 def main():
-    try:
-        data = fetch_json_from_onion_url(onion_url)
-        for item in data.get('items', []):
-            victim = item.get('title', 'Unknown Victim')
-            text = item.get('text', '')
-            date = item.get('date', 'No date provided')
-            publication_date = transform_date(date)
-            description = text[:200]
-            first_line = text.splitlines()[0] if text else ''
-            website = extract_website(first_line)
-            website = extract_fqdn(website)
-        
-            appender(victim, 'morpheus',description,website,publication_date)
-    except Exception as e:
-        errlog('morpheus' + ' - parsing fail with error: ' + str(e))
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://izsp6ipui4ctgxfugbgtu65kzefrucltyfpbxplmfybl5swiadpljmyd.onion']
 
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
         
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                data = response.json()
+                for item in data.get('items', []):
+                    victim = item.get('title', 'Unknown')
+                    text = item.get('text', '')
+                    published = item.get('date', '')
+                    try:
+                        published = datetime.fromisoformat(published.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S.%f")
+                    except: pass
+                    
+                    description = text[:300] if text else ""
+                    website = extract_website(text) if text else ""
+                    
+                    appender(victim, target_group_name, description, website, published)
+                return
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Morpheus API Error for {base_url}: {e}")
+
+if __name__ == "__main__":
+    main()

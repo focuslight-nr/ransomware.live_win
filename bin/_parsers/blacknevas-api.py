@@ -1,30 +1,57 @@
+"""
+    Upgraded API Parser for BlackNevas
+"""
+
+import os
+import json
 import requests
-from datetime import datetime
-import os,datetime,sys, re
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
+import urllib3
+import re
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+
+target_group_name = "blacknevas"
+
+# Disable the warning about certificate verification
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Dynamic proxy settings
+proxies = {
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-URL = "http://ctyfftrjgtwdjzlgqh4avbd35sqrs6tde4oyam2ufbjch6oqpqtkdtid.onion" 
-API_URL = URL + "/api/publication"
-CATEGORY_URL = URL + "/api/category"
+def get_base_urls():
+    try:
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def format_datetime(dt_str):
-    """Convert ISO string to 'YYYY-MM-DD HH:MM:SS.ssssss'"""
     try:
         dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-    except Exception:
+    except:
         return dt_str
 
 def extract_company_and_website(company_field):
@@ -33,62 +60,44 @@ def extract_company_and_website(company_field):
     m = re.match(r"^(.*?)(?:\s+(https?://|www\.)[^\s]+)?$", company_field.strip())
     if m:
         name = m.group(1).strip()
-        if m.group(2):
-            url_match = re.search(r"(https?://[^\s]+|www\.[^\s]+)", company_field)
-            if url_match:
-                website = url_match.group(1)
+        url_match = re.search(r"(https?://[^\s]+|www\.[^\s]+)", company_field)
+        if url_match:
+            website = url_match.group(1)
     return name, website
 
-def fetch_category_mapping():
-    resp = requests.get(CATEGORY_URL, proxies=PROXIES, timeout=60)
-    resp.raise_for_status()
-    data = resp.json()
-    # categoryId -> name mapping
-    return {cat['id']: cat['name'] for cat in data}
-
 def main():
-    print("Fetching category mapping...")
-    cat_map = fetch_category_mapping()
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://ctyfftrjgtwdjzlgqh4avbd35sqrs6tde4oyam2ufbjch6oqpqtkdtid.onion']
 
-    print("Fetching victim data...")
-    resp = requests.get(API_URL, proxies=PROXIES, timeout=60)
-    resp.raise_for_status()
-    data = resp.json()
-    try:
-        for idx, item in enumerate(data, 1):
-            company_name, website = extract_company_and_website(item.get("company", ""))
-            created_at = item.get("createdAt", "")[:19].replace("T", " ")
-            updated_at = item.get("updatedAt", "")[:19].replace("T", " ")
-            desc_html = item.get("description", "")
-            desc_text = re.sub('<[^<]+?>', '', desc_html).strip()
-            category_id = item.get('categoryId')
-            category_name = cat_map.get(category_id, "Unknown")
-            post_url = URL + "/publications/details/" + item.get("id")
-            revenue = item.get('revenue')
-            extra_infos = { 'Activity': category_name if category_name else '', 'Revenue': revenue }
+    for base_url in base_urls:
+        try:
+            # Fetch Category Mapping
+            cat_url = urljoin(base_url + '/', 'api/category')
+            stdlog(f"Fetching {target_group_name} Categories: {cat_url}")
+            cat_resp = requests.get(cat_url, proxies=proxies, verify=False, timeout=30)
+            cat_map = {cat['id']: cat['name'] for cat in cat_resp.json()} if cat_resp.status_code == 200 else {}
 
-            published_date = format_datetime(created_at)
-            """
-            #print(f"Victim #{idx}")
-            print(f"ID           : {item.get('id')}")
-            print(f"Company      : {company_name}")
-            print(f"Website      : {website}")
-            print(f"Status       : {item.get('status')}")
-            print(f"Category     : {category_name} ") 
-            print(f"Published    : {published_date}")
-            print(f"\nDescription:\n{desc_text}")
-            print(f"Post URL     : {post_url}")
-            print(f"{'='*70}") 
-            """
-            appender(
-                victim=company_name,
-                group_name='blacknevas',
-                description=desc_text,
-                website=website,
-                published=published_date,
-                post_url=post_url,
-                country="",
-                extra_infos=extra_infos
-            )
-    except Exception as e:
-        errlog('blacknevas' + ' - parsing fail with error: ' + str(e))
+            # Fetch Victims
+            api_url = urljoin(base_url + '/', 'api/publication')
+            stdlog(f"Fetching {target_group_name} Victims: {api_url}")
+            resp = requests.get(api_url, proxies=proxies, verify=False, timeout=45)
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data:
+                    company_name, website = extract_company_and_website(item.get("company", ""))
+                    created_at = item.get("createdAt", "")[:19].replace("T", " ")
+                    desc_html = item.get("description", "")
+                    desc_text = re.sub('<[^<]+?>', '', desc_html).strip()
+                    category_name = cat_map.get(item.get('categoryId'), "Unknown")
+                    post_url = urljoin(base_url + '/', f"publications/details/{item.get('id')}")
+                    extra_infos = { 'Activity': category_name, 'Revenue': item.get('revenue') }
+                    
+                    appender(company_name, target_group_name, desc_text, website, format_datetime(created_at), post_url, "", extra_infos)
+                return
+        except Exception as e:
+            errlog(f"BlackNevas API Error for {base_url}: {e}")
+
+if __name__ == "__main__":
+    main()

@@ -12,3 +12,11 @@ telethon
 tldextract
 urllib3
 validators
+beautifulsoup4
+lxml
+openai
+pycountry
+pandas
+rapidfuzz
+google-genai
+openpyxl

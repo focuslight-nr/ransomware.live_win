@@ -1,0 +1,2 @@
+# Dependencies required only for the Windows environment
+windows-curses

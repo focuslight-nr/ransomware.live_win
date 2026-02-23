@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('darkvault-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 post_blocks = soup.find_all("div", class_="post-block")
                 for post_block in post_blocks:

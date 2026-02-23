@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('threeam-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 post_divs = soup.find_all('div', class_='post')
                 for post_div in post_divs:

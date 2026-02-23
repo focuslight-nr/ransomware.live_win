@@ -21,6 +21,7 @@ import cv2
 
 #Appender
 from openai import OpenAI
+from google import genai
 #from mistralai import Mistral
 import pycountry
 
@@ -43,12 +44,26 @@ import base64
 from libcapture import capture_victim
 
 # Load environment variables from ../.env
-env_path = Path("../.env")
-load_dotenv(dotenv_path=env_path)
+# Determine project root based on script location
+home = Path(__file__).resolve().parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path, override=True)
 # Paths from environment variables
-home = os.getenv("RANSOMWARELIVE_HOME")
-db_dir = Path(home + os.getenv("DB_DIR"))
+db_dir = home.joinpath(os.getenv("DB_DIR").strip('/'))
+AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# Gemini
+GEMINI_API_KEY= os.getenv('GEMINI_API_KEY')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'models/gemini-2.5-flash')
+
+HUDSONROCK_ENABLED = os.getenv('HUDSONROCK_ENABLED', 'true').lower() == 'true'
+BLUESKY_ENABLED = os.getenv('BLUESKY_ENABLED', 'true').lower() == 'true'
+NTFY_ENABLED = os.getenv('NTFY_ENABLED', 'true').lower() == 'true'
+PUSHOVER_ENABLED = os.getenv('PUSHOVER_ENABLED', 'true').lower() == 'true'
+AUTO_SCREENSHOT = os.getenv('AUTO_SCREENSHOT', 'false').lower() == 'true'
+USE_WATERMARK = os.getenv('USE_WATERMARK', 'true').lower() == 'true'
+LOCAL_DUPLICATES = os.getenv('LOCAL_DUPLICATES', 'false').lower() == 'true'
+WATERMARK_IMAGE_PATH = home / os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")
 proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")  # Default to Tor proxy
 
 
@@ -65,7 +80,7 @@ def errlog(msg):
     logging.error(msg)
 
 # Load the pre-trained Haar Cascade classifier for face detection 
-face_cascade = cv2.CascadeClassifier('/opt/ransomwarelive/etc/haarcascade_frontalface_default.xml')
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def check_image_for_face(image_path, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)):
     """
@@ -105,37 +120,49 @@ def check_image_for_face(image_path, scaleFactor=1.1, minNeighbors=5, minSize=(3
         errlog( f"OpenCV: An error occurred: {str(e)}")
         return False
 
-def enrich_post(title: str, description: str) -> Dict[str, Any]:
-    OPENAPI_MODEL = "gpt-4o-mini"
-    OPENAPI_TEMPERATURE = 0.0
-    PROMPT_TEMPLATE = (
-    "You are a threat intelligence assistant and tracking posts of ransomware groups. They only display alleged victim names on their leak sites.\n"
-    "The victim name is: '{title}' and the post description is: {description}\n\n"
-    "I need you to help me find the following information about the victim"
-    "and answer in strict JSON with these keys ONLY:\n"
-    "  company_name   (string)\n"
-    "  country        (string, ISO 3166‑1 country name if known, else \"unknown\")\n"
-    "  sector         (list, the list of sectors the victim belongs to. Use sectors from the NIS Directive\n"
-    "  url            (string, victim's official website or \"unknown\")\n"
-    "  summary        (string, ≤ 50 words)\n\n"
-    "If you are uncertain about a field, put \"unknown\", but do not invent facts.\n"
-    "For the country location, use the company address as displayed by the Google search.\n"    
-    )
-    prompt = PROMPT_TEMPLATE.format(title=title, description=description)
-    openai.api_key = OPENAI_API_KEY
-    response = openai.chat.completions.create(
-        model=OPENAPI_MODEL,
-        temperature=OPENAPI_TEMPERATURE,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": "You are a threat intelligence assistant supporting a CTI team tracking ransomware incidents."},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    return json.loads(response.choices[0].message.content)
 
 
 
+
+def query_ai(prompt):
+    """
+    Queries the configured AI provider (OpenAI or Gemini) with a given prompt.
+    """
+    provider = AI_PROVIDER.lower()
+    
+    if provider == 'gemini':
+        if not GEMINI_API_KEY:
+            errlog("GEMINI_API_KEY not set in .env file.")
+            return None
+        try:
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt
+            )
+            return response.text
+        except Exception as e:
+            errlog(f"Gemini API error: {e}")
+            return None
+            
+    elif provider == 'openai':
+        if not OPENAI_API_KEY:
+            errlog("OPENAI_API_KEY not set in .env file.")
+            return None
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            completion = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"[!] OpenAI API error: {e}")
+            return None
+            
+    else:
+        errlog(f"Unknown AI_PROVIDER '{AI_PROVIDER}' in .env file. Please use 'openai' or 'gemini'.")
+        return None
 
 def openjson(file):
     '''
@@ -170,7 +197,7 @@ def extract_fqdn(url):
 
 # Function to get the current timestamp in the desired format
 def get_current_timestamp():
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
 
 def is_file_older_than(filepath, duration_minutes):
     """
@@ -185,7 +212,7 @@ def is_file_older_than(filepath, duration_minutes):
     """
     filepath = Path(filepath)
     if filepath.exists():
-        file_age = datetime.utcnow() - datetime.fromtimestamp(filepath.stat().st_mtime)
+        file_age = datetime.now(timezone.utc) - datetime.fromtimestamp(filepath.stat().st_mtime, timezone.utc)
         return file_age > timedelta(minutes=duration_minutes)
     return True  # Treat non-existent files as "old"
 
@@ -194,8 +221,8 @@ def url_to_md5(url):
 
 async def take_screenshot_victim(url):
     TOR_PROXY = "socks5://127.0.0.1:9050"
-    OUTPUT_DIR = "/opt/ransomwarelive/images/victims"
-    WATERMARK_PATH = Path("/opt/ransomwarelive/images/ransomwarelive.png")
+    OUTPUT_DIR = os.path.join(home, os.getenv("IMAGES_DIR", "images").strip("/"), "victims")
+    WATERMARK_PATH = Path(os.path.join(home, os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")))
     md5_base = url_to_md5(url)
     segment_dir = os.path.join(OUTPUT_DIR, f"{md5_base}_segments")
     final_path = None
@@ -347,17 +374,29 @@ async def screenshot(page, image_path, watermark_image_path):
         except Exception as e:
             errlog('Failled to save screenshot: '+ str(e) )
 
-def add_watermark(image_path, watermark_image_path):
+def add_watermark(image_path, watermark_image_path=None):
     """
     Adds a watermark image to the center of the input image.
 
     Args:
         image_path (Path): Path to the image to watermark.
-        watermark_image_path (Path): Path to the watermark image.
+        watermark_image_path (Path, optional): Path to the watermark image. Defaults to environment setting.
 
     Returns:
         None
     """
+    if not USE_WATERMARK:
+        return
+
+    if watermark_image_path is None:
+        watermark_image_path = WATERMARK_IMAGE_PATH
+    else:
+        watermark_image_path = Path(watermark_image_path)
+
+    if not watermark_image_path.exists():
+        errlog(f"Watermark file not found: {watermark_image_path}")
+        return
+
     image_path = Path(image_path)
     watermark_image_path = Path(watermark_image_path)
 
@@ -467,10 +506,10 @@ async def victim_screenshot(post_url, group_name, victim):
     """
     hash_object = hashlib.md5(post_url.encode('utf-8'))
     hex_digest = hash_object.hexdigest()
-    screenshot_path = os.path.join('/opt/ransomwarelive/images/victims', f'{hex_digest}.png')
+    screenshot_path = os.path.join(home, os.getenv("IMAGES_DIR", "images").strip("/"), 'victims', f'{hex_digest}.png')
             
     proxy = "socks5://127.0.0.1:9050"  # Default to Tor's SOCKS proxy
-    watermark_path = Path('/opt/ransomwarelive/images/ransomwarelive.png')  # Example watermark path
+    watermark_path = Path(os.path.join(home, os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")))
 
     async with async_playwright() as playwright:
         '''
@@ -536,10 +575,13 @@ def get_country(victim,description='',website=''):
     elif description.startswith("Country : "):
         country_name = description.split('-')[0].strip().replace("Country : ","")
 
-    if description and not country_name:
+    if not country_name:
+        combined_text = (victim + " " + (description if description else "")).strip()
         for name_country in country_names:
-            if name_country in description:
+            # Check for country name as a whole word to avoid false positives
+            if re.search(r'\b' + re.escape(name_country) + r'\b', combined_text, re.IGNORECASE):
                 country_name = name_country
+                break
 
     if country_name:
         try:
@@ -592,7 +634,7 @@ def extract_md5_from_filename(file_name):
 def find_slug_by_md5(group_name, target_md5):
     # Load the JSON data from the file or source
     json_file_path = db_dir / "groups.json"
-    with json_file_path.open('r') as file:
+    with json_file_path.open('r', encoding='utf-8') as file:
             data = json.load(file)
 
     # Find the group entry in the data
@@ -671,7 +713,7 @@ def existingpost(post_title, group_name):
         normalized_title.replace('www.', '')
     }
 
-    with json_file_path.open('r') as file:
+    with json_file_path.open('r', encoding='utf-8') as file:
         posts = json.load(file)
         for post in posts:
             if post['group_name'] == group_name and post['post_title'].lower() in variants:
@@ -705,7 +747,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
     # Check if the victim itself is a valid FQDN
     elif not website and re.match(r'^[\w.-]+\.[a-zA-Z]{2,}$', victim):
         website = victim
-    if website and len(website) > 6:
+    if HUDSONROCK_ENABLED and website and len(website) > 6:
             stdlog('Query Hudsonrock with ' + extract_fqdn(website))
             asyncio.run(hudsonrockapi.run_query(extract_fqdn(website)))
     if published:
@@ -718,17 +760,11 @@ def appender(victim,group_name,description='',website='', published='', post_url
             published = str(datetime.today())
     else:
         published = str(datetime.today())
-    if post_url:
+    if post_url and AUTO_SCREENSHOT:
         #asyncio.run(victim_screenshot(post_url, group_name, victim))
         #asyncio.run(take_screenshot_victim(post_url))
         capture_victim(post_url)
     
-    stdlog(f"Querying OpenAI API for '{victim}' activity...")
-    # Initialize OpenAI Client
-    client = OpenAI(
-        api_key=OPENAI_API_KEY
-    )   
-
     # List of known industry sectors
     SECTOR_LIST = [
         "Manufacturing", "Construction", "Transportation/Logistics", "Technology",
@@ -736,62 +772,39 @@ def appender(victim,group_name,description='',website='', published='', post_url
         "Business Services", "Consumer Services", "Energy", "Telecommunication",
         "Agriculture and Food Production", "Hospitality and Tourism"
     ]
-    prompt = (
-        f'Using this list: {", ".join(SECTOR_LIST)}, '
-        f'can you determine the sector of this company: "{victim}"? '
-        f'Just answer with one word from the list. If you cannot pick one, answer "Not Found".'
-    )
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
+
+    activity = "Not Found"
+    if AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY):
+        stdlog(f"Querying AI for '{victim}' activity...")
+        prompt = (
+            f'Using this list: {", ".join(SECTOR_LIST)}, '
+            f'can you determine the sector of this company: "{victim}"? '
+            f'Just answer with one word from the list. If you cannot pick one, answer "Not Found".'
         )
-        activity = completion.choices[0].message.content.strip()
-        if activity != "Not Found":
-            if activity not in SECTOR_LIST:
-                activity = "Not Found"
-    except Exception as e:
-        print(f"⚠️ OpenAI API error: {e}")
-        activity =  "Not Found"
+        response = query_ai(prompt)
+        if response and "Not Found" not in response and response in SECTOR_LIST:
+            activity = response
 
     ## Get Website 
-    if OPENAI_API_KEY and website is None and description:
-        client = OpenAI()
-        stdlog(f'Query OpenAI API for "{victim}" website')
+    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (website is None or website == '') and description:
+        stdlog(f'Querying AI for "{victim}" website')
         prompt = f'can you give me your best guess for the domain name of "{victim}" Only give me the domain name, no extract text. if you cannot guess just answer "Not Found"'
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-        )
-        website = completion.choices[0].message.content
-        if website == "Not Found":
-            website = ''
+        response = query_ai(prompt)
+        if response and "Not Found" not in response:
+            website = response
 
     if website == None:
         website = ''
 
     ### Get Country 
-    #country = get_country(victim,description,website)
-    if OPENAI_API_KEY and (country is None or len(country) < 2) and '*' not in victim:
-        stdlog(f'Query OpenAI API for "{victim}" country')
-        client = OpenAI()
+    country = get_country(victim,description,website)
+    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (country is None or len(country) < 2) and '*' not in victim:
+        stdlog(f'Querying AI for "{victim}" country')
         prompt = f'I would like the 2 letters code of the country, and only the 2 letters not extra text, where the this company is located : "{victim}"'
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-        )
-        country = completion.choices[0].message.content
-        stdlog(f'Found : {country}')
+        response = query_ai(prompt)
+        if response and len(response) == 2:
+            country = response
+            stdlog(f'Found : {country}')
     
     if len(country) == 2:
         try:
@@ -803,21 +816,12 @@ def appender(victim,group_name,description='',website='', published='', post_url
         
  
     ### Get Description 
-    if OPENAI_API_KEY and description == '' and '*' not in victim:
-        stdlog(f'Query OpenAI API for "{victim}" description')
-        client = OpenAI()
+    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and description == '' and '*' not in victim:
+        stdlog(f'Querying AI for "{victim}" description')
         prompt = f'Can you provide a detailed description for the company "{victim}" in around 400 chars and without any links ? If you cannot just answer "N/A".'
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-        )
-        description = completion.choices[0].message.content
-        description = '[AI generated] ' + description
+        response = query_ai(prompt)
+        if response and response != "N/A":
+            description = '[AI generated] ' + response
 
     now = str(datetime.today())
     if not published:
@@ -833,14 +837,22 @@ def appender(victim,group_name,description='',website='', published='', post_url
         for post in posts:
             post_domain = get_domain(post['website'])  # Extract domain from post['website']
             if post_domain and  victim_domain == post_domain and post['group_name'] != group_name:
-                encoded_link = base64.b64encode(f"{post['post_title']}@{post['group_name']}".encode()).decode()
+                if LOCAL_DUPLICATES:
+                    infos = {
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                        "group": post['group_name'],
+                        "original_post_title": post['post_title'],
+                        "attackdate": post['published']
+                    }
+                else:
+                    encoded_link = base64.b64encode(f"{post['post_title']}@{post['group_name']}".encode()).decode()
             
-                infos = {
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-                    "group": post['group_name'],
-                    "link": f"https://www.ransomware.live/id/{encoded_link}",
-                    "attackdate": post['published']
-                }
+                    infos = {
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                        "group": post['group_name'],
+                        "link": f"https://www.ransomware.live/id/{encoded_link}",
+                        "attackdate": post['published']
+                    }
             
                 doublons_infos = [infos]
                 published = post['published']
@@ -894,6 +906,8 @@ def country_code_to_flag(country_code):
 
 
 def victimtobluesky(post_title,group,country=None):
+    if not BLUESKY_ENABLED:
+        return
     try:
         combined_string = f"{post_title}@{group}"
         uri = 'https://www.ransomware.live/id/'+base64.b64encode(combined_string.encode('utf-8')).decode('utf-8')
@@ -940,6 +954,8 @@ def victimtobluesky(post_title,group,country=None):
 
 
 def msgtoPushover(MESSAGE):
+    if not PUSHOVER_ENABLED:
+        return
     try:
         stdlog('Send Pushover notification')
         USER_KEY=os.getenv('PUSH_USER')
@@ -957,6 +973,8 @@ def msgtoPushover(MESSAGE):
         errlog('Error sending Pushover notification')
 
 def grouptobluesky(group):
+    if not BLUESKY_ENABLED:
+        return
     try:
         stdlog('Send Bluesky notification')
         url = os.environ.get('BLUESKY_URL')
@@ -1007,6 +1025,8 @@ def iso2_to_country_name(iso2_code):
 
 
 def victimtonotify(post_title, group, sector=None, country=None):
+    if not NTFY_ENABLED:
+        return
     try:
         # Build unique URI
         combined_string = f"{post_title}@{group}"

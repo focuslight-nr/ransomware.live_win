@@ -35,7 +35,7 @@ def main():
         try:
             if filename.startswith('cactus-'):
                 html_doc= tmp_dir /  filename
-                file=open(html_doc,'r') 
+                file=open(html_doc, 'r', encoding='utf-8') 
                 soup = BeautifulSoup(file, 'html.parser')
 
                 # Find the script tag containing JSON data

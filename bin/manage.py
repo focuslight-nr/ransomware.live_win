@@ -14,11 +14,12 @@ import validators
 import glob
 
 # Load environment variables from ../.env
-env_path = Path("../.env")
+# Determine project root based on script location
+home = Path(__file__).resolve().parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 # Paths from environment variables
-home = os.getenv("RANSOMWARELIVE_HOME")
-db_dir = Path(home + os.getenv("DB_DIR"))
+db_dir = home.joinpath(os.getenv("DB_DIR").strip('/'))
 GROUPS_FILE = db_dir / "groups.json"
 
 def checkexisting(provider):
@@ -100,7 +101,7 @@ def siteappender(name, location):
     """
     Append a new location to an existing group in groups.json.
     """
-    lock_file_path = Path(home + '/tmp/scrape.lock')  # Update with your actual lock file path
+    lock_file_path = home / 'tmp' / 'scrape.lock'  # Update with your actual lock file path
     wait_for_lock(lock_file_path)  # Wait for the lock to disappear
     
     groups = openjson(GROUPS_FILE)
@@ -134,7 +135,7 @@ def siteadder(name, location):
     """
     Add a new group to groups.json or append to an existing group.
     """
-    lock_file_path = Path(home + '/tmp/scrape.lock')  # Update with your actual lock file path
+    lock_file_path = home / 'tmp' / 'scrape.lock'  # Update with your actual lock file path
     wait_for_lock(lock_file_path)  # Wait for the lock to disappear
     if checkexisting(name):
         stdlog(f"Ransomware.live: Group '{name}' already exists. Appending location instead.")
@@ -192,7 +193,7 @@ def purge_old_html_files():
     """
     Deletes all *.html files in tmp_dir older than 24 hours.
     """
-    tmp_dir = Path(home + '/tmp')  # Adjust based on actual usage
+    tmp_dir = home / 'tmp'  # Adjust based on actual usage
     if not tmp_dir.exists():
         errlog(f"Directory '{tmp_dir}' does not exist. Skipping purge.")
         return
@@ -221,7 +222,7 @@ def main():
       | |   \___/   | |                      | |   \___/   | |
       | |___     ___| |                      | |___________| |
       |_____|\_/|_____|                      |_______________|
-        _|__|/ \|_|_.............💔.............._|________|_
+        _|__|/ \|_|_.............X.............._|________|_
        / ********** \                          / ********** \ 
      /  ************  \   ransomware.live     /  ************  \ 
     --------------------                    --------------------
@@ -229,6 +230,11 @@ def main():
     )
 
     parser = argparse.ArgumentParser(description="Manage Ransomware.live.")
+    parser.add_argument(
+        '-F', '--force',
+        action='store_true',
+        help="Force remove previous lock file."
+    )
     group = parser.add_mutually_exclusive_group(required=True)
 
     # Adding options
@@ -262,13 +268,22 @@ def main():
 
     args = parser.parse_args()
 
+    if args.force:
+        lock_file_path = home / 'tmp' / 'scrape.lock'
+        if lock_file_path.exists():
+            lock_file_path.unlink()
+            stdlog("Removed stale lock file.")
+
 
     # Handling options
     if args.append:
-        name, location = args.append
+        name = name.strip('"').lower() # Convert to lowercase
+        location = location.strip('"')
         siteappender(name, location)
     elif args.add:
         name, location = args.add
+        name = name.strip('"').lower() # Convert to lowercase
+        location = location.strip('"')
         siteadder(name, location)
     elif args.blur:
         renamed_input_path = rename_original_image(args.blur)

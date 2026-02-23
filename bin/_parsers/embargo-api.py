@@ -1,114 +1,88 @@
 """
-    From Template v4 - 202412827
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
+    Upgraded API Parser for Embargo
 """
 
-import os,datetime,sys
-from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
-from pathlib import Path
-from dotenv import load_dotenv
-
-env_path = Path("../.env")
-load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
-db_dir = Path(home + os.getenv("DB_DIR"))
-
-
+import os
+import json
 import requests
 import urllib3
-import json
+from pathlib import Path
+from dotenv import load_dotenv
+from urllib.parse import urljoin
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
+
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+
+target_group_name = "embargo"
+api_endpoint_suffix = "api/blog/get"
 
 # Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Assuming Tor is running on default port 9050.
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://localhost:9050',
-    'https': 'socks5h://localhost:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
-def get_fqdns_from_json(filename, group_name):
-    # Load the JSON data from the file
-    with open(filename, 'r') as file:
-        data = json.load(file)
 
-    # Initialize a list to hold the FQDNs
-    fqdns = []
-
-    # Loop through each item in the JSON data (assuming top level is a list)
-    for item in data:
-        # Check if the group name matches
-        if item.get("name") == group_name:
-            # Loop through each location in the locations list
-            for location in item.get("locations", []):
-                # Append the FQDN to the list
-                fqdns.append(location["fqdn"])
-            break
-
-    return fqdns
-
-
-def fetch_json_from_onion_url(onion_url):
+def get_base_urls():
     try:
-        response = requests.get(onion_url, proxies=proxies, verify=False)
-        response.raise_for_status()
-        return json.loads(response.text)  # ✅ parsing manuel
-    except requests.exceptions.RequestException as e:
-        print("Error:", e)
-        return None
-    except json.JSONDecodeError as e:
-        print("JSON parsing error:", e)
-        return None
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def convert_datetime(iso_datetime):
-    # Parse the ISO 8601 formatted string to a datetime object
-    if '+' in iso_datetime:
-        iso_datetime = iso_datetime.split('+')[0]
-        return iso_datetime
-    else:
-        dt_obj = datetime.fromisoformat(iso_datetime)
-    
-        # Format the datetime object to the desired string format
-        formatted_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S.%f")
-    
-        return formatted_datetime
+    try:
+        if '+' in iso_datetime:
+            return iso_datetime.split('+')[0].replace('T', ' ')
+        dt_obj = datetime.fromisoformat(iso_datetime.replace('Z', '+00:00'))
+        return dt_obj.strftime("%Y-%m-%d %H:%M:%S.%f")
+    except:
+        return iso_datetime.replace('T', ' ')
 
 def main():
-    filename = db_dir / "groups.json"
-    group_name = "embargo"
-    fqdns = get_fqdns_from_json(filename, group_name)
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://v7f6v7v7v7v7v7v7.onion'] # Placeholder if empty
 
-    for fqdn in fqdns:
-        onion_url = f"http://{fqdn}/api/blog/get"
-        json_data = fetch_json_from_onion_url(onion_url)
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                json_data = response.json()
+                blogs = json_data.get("blogs", [])
+                for item in blogs:
+                    title = item.get('comname', '').strip()
+                    description = f"{item.get('descr', '')} - {item.get('comments', '')}"
+                    published = convert_datetime(item.get('date_created', ''))
+                    post_url = urljoin(base_url + '/', f"#/post/{item.get('_id', '')}")
+                    
+                    appender(title, target_group_name, description, "", published, post_url)
+                return
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Embargo API Error for {base_url}: {e}")
 
-        if json_data is None:
-            errlog(f"Failed to fetch data from {onion_url}")
-            continue
-
-        blogs = json_data.get("blogs", [])
-        if not isinstance(blogs, list):
-            errlog(f"Unexpected structure in response from {onion_url}: 'blogs' is not a list")
-            continue
-
-        for item in blogs:
-            try:
-                post_id = item['_id']
-                title = item.get('comname', '').strip()
-                description = item.get('descr', '')
-                comments = item.get('comments', '')
-                date_created = item.get('date_created', '').replace('T', ' ')
-                pubdate = convert_datetime(date_created)
-                post_url = f"http://{fqdn}/#/post/{post_id}"
-
-                appender(title, group_name, f"{description} - {comments}", "", pubdate, post_url)
-            except Exception as e:
-                errlog(f"Error parsing item from {onion_url}: {e}")
+if __name__ == "__main__":
+    main()

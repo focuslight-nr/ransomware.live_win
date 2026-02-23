@@ -8,7 +8,10 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os,datetime,sys,re
+import os
+from urllib.parse import urljoin
+import sys
+import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog, stdlog
@@ -25,14 +28,14 @@ def main():
         try:
             if filename.startswith('apt73-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc,'r', encoding='utf-8')
                 stdlog(f'Parsing: {html_doc}')
                 soup = BeautifulSoup(file, 'html.parser')
                 segment_box = soup.find('div', class_='segment__box')
                 for segment in segment_box.find_all('div', class_='segment'):
                     link = segment.get('onclick').split("'")[1] if segment.get('onclick') else None
                     victim = segment.find('div', class_='segment__text__off').text.strip() if segment.find('div', class_='segment__text__off') else None
-                    post_url = 'http://basherq53eniermxovo3bkduw5qqq5bkqcml3qictfmamgvmzovykyqd.onion' +  str(link)
+                    post_url = urljoin("http://basherq53eniermxovo3bkduw5qqq5bkqcml3qictfmamgvmzovykyqd.onion", str(link))
                     description = segment.find('div', class_='segment__text__dsc').text.strip() if segment.find('div', class_='segment__text__dsc') else None
                     date_info = segment.find('div', class_='segment__date__deadline').text.strip() if segment.find('div', class_='segment__date__deadline') else None
                     date_text = date_info.replace('UTC +0', '').strip()

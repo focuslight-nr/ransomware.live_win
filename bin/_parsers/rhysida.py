@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('rhysida-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 div_containers = soup.find_all('div', class_='border m-2 p-2')
                 for div in div_containers:

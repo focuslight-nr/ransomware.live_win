@@ -27,7 +27,7 @@ def main():
         try:
             if filename.startswith('spacebears-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 company_blocks = soup.find_all('div', class_='companies-list__item')
                 for block in company_blocks:

@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('GDLockerSec-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 cards = soup.find_all('div', class_='card')
                 for card in cards:

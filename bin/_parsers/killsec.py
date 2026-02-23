@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('killsec-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name=soup.find_all('a', {"class": "post-block unleaked"})
                 address  = find_slug_by_md5('killsec', extract_md5_from_filename(str(html_doc))) 

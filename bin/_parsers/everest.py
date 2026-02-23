@@ -25,7 +25,7 @@ def main():
         try:
             if filename.startswith('everest-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 for div in soup.find_all('div', class_='category-item js-open-chat'):
                     # Victim name

@@ -1,93 +1,87 @@
 """
-    From Template v4 - 202412827
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
+    Upgraded API Parser for Hunters International
 """
 
-import os,datetime,sys
-#from bs4 import BeautifulSoup
-import urllib3
-import requests
-import socks
+import os
 import json
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename
+import requests
+import urllib3
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
+from datetime import datetime
+from shared_utils import appender, stdlog, errlog
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
-
-onion_url= 'https://hunters55rdxciehoqzwv7vgyv6nt37tbwax2reroyzxhou7my5ejyid.onion/api/public/companies'
+target_group_name = "hunters international"
+api_endpoint_suffix = "api/public/companies"
 
 # Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Assuming Tor is running on default port 9050.
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://localhost:9050',
-    'https': 'socks5h://localhost:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-def fetch_json_from_onion_url(onion_url):
+def get_base_urls():
     try:
-        response = requests.get(onion_url, proxies=proxies,verify=False)
-        response.raise_for_status()  # Check for any HTTP errors
-    except requests.exceptions.RequestException as e:
-        print("Error:", e)
-        return None
-
-    # Assuming the response contains JSON data, parse it
-    json_data = response.json()
-    return json_data
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def convert_date(unix_timestamp):
-    # Convert the Unix timestamp to a datetime object
-    dt = datetime.fromtimestamp(unix_timestamp)
-    # Format the datetime object as a string with microseconds
-    formatted_datetime = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-    return formatted_datetime
-
-def convert_text(txt):
-    if txt == True:
-        return "yes"
-    else:
-        return "no"
+    try:
+        dt = datetime.fromtimestamp(unix_timestamp)
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    except:
+        return ""
 
 def main():
-    #stdlog('Fetching :'+onion_url) 
-    json_data = fetch_json_from_onion_url(onion_url)
-    #stdlog(onion_url+" Fetched")
-    if json_data is not None:
-        for item in json_data:
-          #try:
-            id = item['id']
-            title = item['title'].strip()
-            country_code = item['country']
-            # country = get_country(item['country'])
-            website = item.get('website','')
-            exfiltration = item['exfiltrated_data']
-            encryption = item['encrypted_data']
-            published = item.get('updated_at','')
-            description = "Exfiltraded data : " + convert_text(exfiltration) +  " - Encrypted data : " + convert_text(encryption)
-            post_url = "https://hunters55rdxciehoqzwv7vgyv6nt37tbwax2reroyzxhou7my5ejyid.onion/companies/" + id 
-            if not website:
-                website=''
-            if country_code: 
-                country_code = country_code.upper()
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['https://hunters55rdxciehoqzwv7vgyv6nt37tbwax2reroyzxhou7my5ejyid.onion']
+
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                json_data = response.json()
+                for item in json_data:
+                    title = item.get('title', '').strip()
+                    website = item.get('website', '')
+                    published = convert_date(item.get('updated_at', 0))
+                    description = f"Exfiltraded: {item.get('exfiltrated_data')} - Encrypted: {item.get('encrypted_data')}"
+                    post_url = urljoin(base_url + '/', f"companies/{item.get('id', '')}")
+                    country = item.get('country', '').upper()
+                    
+                    appender(title, 'hunters', description, website, published, post_url, country)
+                return
             else:
-                country_code = '' 
-            """
-                def appender(post_title, group_name, description="", website="", published="", post_url=""):
-            """
-            appender(title, 'hunters', description,website, convert_date(published),post_url,country_code)
-          #except:
-          #    stdlog('Hunters API error : ' + title)
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Hunters API Error for {base_url}: {e}")
+
+if __name__ == "__main__":
+    main()

@@ -21,28 +21,36 @@ home = os.getenv("RANSOMWARELIVE_HOME")
 tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
 
+from urllib.parse import urljoin
+
 def main():
     for filename in os.listdir(tmp_dir):
         try:
-            if filename.startswith('metaencryptor-'):
+            if filename.startswith('metaencryptor-') or filename.startswith('metaencrypter-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
-                cards = soup.find_all('div', class_='card-header')
+                # Find all victim cards
+                cards = soup.find_all('div', class_='col d-flex align-items-stretch mb-3')
                 for card in cards:
-                   for card in cards:
-                    victim = card.get_text(strip=True)
-                    description = card.find_next('p', class_='card-text').get_text(strip=True)
+                    header = card.find('div', class_='card-header')
+                    if not header: continue
+                    victim = header.get_text(strip=True)
                     
-                    website_link = card.find_next('a', class_='btn btn-secondary btn-sm')
-                    website = website_link['href'] if website_link else None
+                    desc_tag = card.find('p', class_='card-text')
+                    description = desc_tag.get_text(strip=True) if desc_tag else ""
                     
-                    post_link = card.find_next('a', class_='btn btn-primary btn-sm')
+                    website_link = card.find('a', class_='btn btn-secondary btn-sm', href=True)
+                    website = website_link['href'] if website_link and not website_link['href'].startswith('#') else ""
+                    
+                    post_link = card.find('a', class_='btn btn-primary btn-sm', href=True)
+                    post_url = ""
                     if post_link:
-                        #post_url = "https://metacrptmytukkj7ajwjovdpjqzd7esg5v3sg344uzhigagpezcqlpyd.onion" + post_link['href']
-                        post_url = find_slug_by_md5('metaencryptor', extract_md5_from_filename(str(html_doc))) +  post_link['href']
-                    else:
-                        post_url =  None
+                        base_url = find_slug_by_md5('metaencryptor', extract_md5_from_filename(filename))
+                        if not base_url:
+                            base_url = "http://metacrptmytukkj7ajwjovdpjqzd7esg5v3sg344uzhigagpezcqlpyd.onion"
+                        post_url = urljoin(base_url.rstrip('/') + '/', post_link['href'].lstrip('/'))
+                    
                     appender(victim, 'metaencryptor', description, website, '', post_url)
                 file.close()
         except Exception as e:

@@ -44,7 +44,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 page_title = soup.title.string.strip() if soup.title else ""
                 if page_title == "SKIRA TEAM - Hacking News Main Page":

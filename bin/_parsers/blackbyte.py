@@ -12,51 +12,58 @@ tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
 
 def main():
-    script_path = os.path.abspath(__file__)
-    if os.path.islink(script_path):
-        original_path = os.readlink(script_path)
-        if not os.path.isabs(original_path):
-            original_path = os.path.join(os.path.dirname(script_path), original_path)
-        group_name = os.path.basename(original_path).replace('.py','')
-    else:
-        group_name = os.path.basename(script_path).replace('.py','')
+    target_group_name = 'blackbyte'
 
     for filename in os.listdir(tmp_dir):
-        try:
-            if filename.startswith(group_name + '-'):
-                html_doc = tmp_dir / filename
+        if filename.startswith(target_group_name + '-'):
+            html_doc = tmp_dir / filename
+            try:
                 with open(html_doc, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'html.parser')
 
-
-                divs_name=soup.find_all('table', {"class": "table table-bordered table-content"})
-                # <table class="table table-bordered table-content ">
+                # Try primary structure
+                divs_name = soup.find_all('table', {"class": "table table-bordered table-content"})
                 for div in divs_name:
-                    title = div.find('h1').text.strip()
-                    description = div.find('p').text.strip().replace("\n", "")
-                    website = div.find('a')
-                    website = website.attrs['href']
-                    appender(title, 'blackbyte', description,website)
-                file.close()
-        except:
-                pass
-        try:
-            if filename.startswith('blackbyte-'):
-                html_doc='source/'+filename
-                file=open(html_doc,'r')
-                soup=BeautifulSoup(file,'html.parser')
-                tables = soup.find_all('table', class_='table')
+                    try:
+                        title_tag = div.find('h1')
+                        if not title_tag: continue
+                        title = title_tag.text.strip()
+                        
+                        desc_tag = div.find('p')
+                        description = desc_tag.text.strip().replace("\n", "") if desc_tag else ""
+                        
+                        link_tag = div.find('a', href=True)
+                        website = link_tag['href'] if link_tag else ""
+                        
+                        appender(title, target_group_name, description, website)
+                    except Exception as e:
+                        errlog(f'blackbyte - error parsing table item: {e}')
 
-                # Extract captions and last dates
+                # Try fallback structure (historical)
+                tables = soup.find_all('table', class_='table')
                 for table in tables:
-                   caption = table.find('caption', class_='target-name').text
-                   rows = table.find('tbody').find_all('tr')
-                   last_date = rows[-1].find('td').text
-                   #print(f"Table Caption: {caption}")
-                   #print(f"Last Date: {last_date}")
-                   last_date = datetime.strptime(last_date, '%Y-%m-%d %H:%M')
-                   published = last_date.strftime('%Y-%m-%d %H:%M:%S.%f')
-                   appender(caption, 'blackbyte', '','',published)
-        except Exception as e:
-            errlog('blackbyte: ' + 'parsing fail: '  + str(e))
+                    try:
+                        caption_tag = table.find('caption', class_='target-name')
+                        if not caption_tag: continue
+                        caption = caption_tag.text.strip()
+                        
+                        tbody = table.find('tbody')
+                        if not tbody: continue
+                        rows = tbody.find_all('tr')
+                        if not rows: continue
+                        
+                        last_date_text = rows[-1].find('td').text.strip()
+                        try:
+                            last_date = datetime.strptime(last_date_text, '%Y-%m-%d %H:%M')
+                            published = last_date.strftime('%Y-%m-%d %H:%M:%S.%f')
+                        except:
+                            published = ""
+                            
+                        appender(caption, target_group_name, '', '', published)
+                    except Exception as e:
+                        # Silently skip if it's not the intended table structure
+                        pass
+
+            except Exception as e:
+                errlog(f'blackbyte - error reading file {filename}: {e}')
             

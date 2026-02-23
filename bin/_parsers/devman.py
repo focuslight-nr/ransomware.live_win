@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('devman-'):
                 html_doc=tmp_dir /  filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 rows = soup.find_all('table')[0].find_all('tr')[1:]
                 for row in rows:

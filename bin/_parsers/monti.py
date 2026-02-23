@@ -39,7 +39,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name = soup.find_all('div', {"class": "col-lg-4 col-sm-6 mb-4"})
                 for div in divs_name:

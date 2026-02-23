@@ -8,7 +8,10 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os,datetime,sys,re
+import os
+from urllib.parse import urljoin
+import sys
+import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
@@ -26,7 +29,7 @@ def main():
         try:
             if filename.startswith('bianlian-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name=soup.find_all('section', {"class": "list-item"})
                 for div in divs_name:
@@ -37,7 +40,7 @@ def main():
                         url = find_slug_by_md5('bianlian', extract_md5_from_filename(str(html_doc))) + str(post)
                     except:
                         #url = ''
-                        url = "bianlianlbc5an4kgnay3opdemgcryg2kpfcbgczopmm3dnbz3uaunad.onion" + str(post)
+                        url = urljoin("bianlianlbc5an4kgnay3opdemgcryg2kpfcbgczopmm3dnbz3uaunad.onion", str(post))
                     description = div.div.text.strip()
                     description = description.replace('%20',' ')
                     appender(title, 'bianlian', description,"","",url)

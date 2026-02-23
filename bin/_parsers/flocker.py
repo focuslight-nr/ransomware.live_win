@@ -25,7 +25,7 @@ def main():
         try:
             if filename.startswith('flocker-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 entries = soup.find_all('h2', class_='entry-title ast-blog-single-element')
                 for entry in entries:

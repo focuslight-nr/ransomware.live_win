@@ -27,7 +27,7 @@ def main():
     for filename in os.listdir(tmp_dir):
         if filename.startswith('clop-'):
             html_doc= tmp_dir / filename
-            file=open(html_doc,'r')
+            file=open(html_doc, 'r', encoding='utf-8')
             soup=BeautifulSoup(file,'html.parser')
             ###divs_name=soup.find_all('span', {"class": "g-menu-item-title"})
             menu_items = soup.select(".g-menu-item")

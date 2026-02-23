@@ -1,83 +1,87 @@
 """
-    From Template v4 - 202412827
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
+    Upgraded API Parser for Abyss
 """
 
-import os,datetime,sys
-from bs4 import BeautifulSoup
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename,errlog
+import os
+import json
+import requests
+import urllib3
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
+from shared_utils import appender, stdlog, errlog
 
-import requests
-import datetime
-import json
-
-
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-db_dir = Path(home + os.getenv("DB_DIR"))
 
-# Tor proxy settings
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+
+target_group_name = "abyss"
+api_endpoint_suffix = "static/data.js"
+
+# Disable the warning about certificate verification
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Dynamic proxy settings
 proxies = {
-    'http': 'socks5h://127.0.0.1:9050',
-    'https': 'socks5h://127.0.0.1:9050'
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-# Group name you're interested in
-target_group_name = "abyss"
-
+def get_base_urls():
+    try:
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+    except Exception as e:
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def main():
-    # Read the groups.json file
-    with open(f'{db_dir}/groups.json', 'r') as file:
-        groups_data = json.load(file)
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        # Fallback for safety
+        base_urls = ['http://3ev4metjirohtdpshsqlkrqcmxq6zu3d7obrdhglpy5jpbr7whmlfgqd.onion']
 
-    # Find the specific group by name
-    group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-
-    locations = group.get('locations', [])
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix.lstrip('/'))
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
         
-    for location in locations:
-        slug = location.get('slug')
-        if slug:
-            slug = f'{slug}static/data.js'
-            #print(f"Requesting data from: {slug}") 
-                
-            # Make the request via Tor
-            try: 
-                response = requests.get(slug, proxies=proxies, timeout=(60, 60))
-                
-                if response.status_code == 200:
-                    data_js_content = response.text
-
-                    # Extract the relevant array data manually
-                    data_js_content = data_js_content.strip()
-                    # Remove 'let data =' and the trailing semicolon
-                    if data_js_content.startswith("let data ="):
-                        data_js_content = data_js_content[len("let data ="):].strip()
-
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                data_js_content = response.text.strip()
+                if data_js_content.startswith("let data ="):
+                    data_js_content = data_js_content[len("let data ="):].strip()
+                    if data_js_content.endswith(';'):
+                        data_js_content = data_js_content[:-1]
+                    
+                    # Use json.loads if possible, fallback to eval
+                    try:
+                        data = json.loads(data_js_content)
+                    except:
                         data = eval(data_js_content)
 
-                        # Process the data
-                        for item in data:
-                            victim = item.get('title', 'No title')
-                            full_lines = item.get('full', '').split('<br>')
+                    for item in data:
+                        victim = item.get('title', 'No title')
+                        full_lines = item.get('full', '').split('<br>')
+                        description = full_lines[1].strip() if len(full_lines) > 1 else ""
+                        appender(victim, target_group_name, description)
+                return # Success
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Request failed for {full_api_url}: {e}")
 
-                            if len(full_lines) > 1:
-                                description = full_lines[1].strip()
-                            else:
-                                description = ""
-
-                            appender(victim, 'abyss', description) 
-
-            except Exception as e:
-                    errlog(f"Abyss : Failed to evaluate the data: {e}")
-        else:
-             errlog(f"Abyss : Failed to fetch the file from {slug}. HTTP Status Code: {response.status_code}")
+if __name__ == "__main__":
+    main()

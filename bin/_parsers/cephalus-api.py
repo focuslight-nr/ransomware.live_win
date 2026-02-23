@@ -1,69 +1,78 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""
+    Upgraded API Parser for Cephalus
+"""
 
-import requests,os
-import sys
-from datetime import datetime
+import os
+import json
+import requests
+import urllib3
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import stdlog, errlog, appender
+from urllib.parse import urljoin
+from datetime import datetime, timezone
+from shared_utils import appender, stdlog, errlog
 
-# Load env
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# Source URL (à personnaliser selon le parser)
-URL = "http://cephalus6oiypuwumqlwurvbmwsfglg424zjdmywfgqm4iehkqivsjyd.onion
-API = URL + "/api/domains"
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
+target_group_name = "cephalus"
+api_endpoint_suffix = "/api/domains"
+
+# Disable the warning about certificate verification
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Dynamic proxy settings
+proxies = {
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-
-def fetch_data():
+def get_base_urls():
     try:
-        r = requests.get(API, proxies=PROXIES, timeout=60)
-        r.raise_for_status()
-        return r.json()
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
     except Exception as e:
-        errlog(f"[{GROUP_NAME}] ❌ Error fetching data: {e}")
-        return []
-        
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def main():
-    script_path = os.path.abspath(__file__)
-    if os.path.islink(script_path):
-        original_path = os.readlink(script_path)
-        if not os.path.isabs(original_path):
-            original_path = os.path.join(os.path.dirname(script_path), original_path)
-        group_name = os.path.basename(original_path).replace('.py','')
-    else:
-        group_name = os.path.basename(script_path).replace('.py','')
-    group_name = group_name.replace('-api','')
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://cephalus6oiypuwumqlwurvbmwsfglg424zjdmywfgqm4iehkqivsjyd.onion']
 
-    data = fetch_data()
-    if not data:
-        return
-   
-
-    for entry in data:
-        victim = entry.get("company") or entry.get("domain")
-        description = entry.get("description") or ""
-        website = entry.get("domain") or ""
-        post_url = entry.get("dataLink") or ""
-
-        added = appender(
-            victim=victim,
-            group_name=group_name,
-            description=description,
-            website=website,
-            published=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-            post_url=post_url,
-            country="",
-            extra_infos=[]
-        )
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix.lstrip('/'))
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                data = response.json()
+                for entry in data:
+                    victim = entry.get("company") or entry.get("domain")
+                    description = entry.get("description") or ""
+                    website = entry.get("domain") or ""
+                    post_url = entry.get("dataLink") or ""
+                    
+                    appender(victim, target_group_name, description, website, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), post_url)
+                return
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Cephalus API Error for {base_url}: {e}")
 
 if __name__ == "__main__":
     main()

@@ -28,7 +28,7 @@ def main():
                 date_format = "%d/%m/%Y"
                 desired_format = "%Y-%m-%d %H:%M:%S.%f"
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 jsonpart= soup.pre.contents 
                 data = json.loads(jsonpart[0]) 

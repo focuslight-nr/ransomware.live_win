@@ -10,20 +10,22 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
-env_path = Path("../.env")
+script_dir = Path(__file__).resolve().parent
+home_path = script_dir.parent
+env_path = home_path / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # Validate environment variables
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir_env = os.getenv("TMP_DIR")
+home = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir_env = os.getenv("TMP_DIR", "/tmp/")
 
-if not home or not tmp_dir_env:
-    print("⚠️ Environment variables RANSOMWARELIVE_HOME or TMP_DIR are missing.")
+if not home:
+    print("⚠️ Environment variable RANSOMWARELIVE_HOME is missing.")
     sys.exit(1)
 
 # Paths
 home_path = Path(home).expanduser().resolve()
-tmp_dir = home_path / Path(tmp_dir_env).name
+tmp_dir = home_path / tmp_dir_env.strip('/')
 parsers_dir = home_path / "bin/_parsers"
 
 # Lock files to check

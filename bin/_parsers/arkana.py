@@ -38,7 +38,7 @@ def main():
         try:
             if filename.startswith('arkana-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 posts = soup.select("article.post")
                 for post in posts:

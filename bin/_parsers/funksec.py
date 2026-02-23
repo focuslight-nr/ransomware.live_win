@@ -44,7 +44,7 @@ def main():
         #try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup = BeautifulSoup(file, 'html.parser')
                 #products_container = soup.find('main', class_='products-container')
                 #for product in products_container.find_all('a', class_='product-card'):

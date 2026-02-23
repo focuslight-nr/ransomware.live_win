@@ -25,7 +25,7 @@ def main():
         try:
             if filename.startswith('blacksuit-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 divs=soup.find_all('div', {"class": "card"})
                 for article in divs:

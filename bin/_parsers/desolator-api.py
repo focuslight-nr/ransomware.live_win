@@ -1,43 +1,62 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""
+    Upgraded API Parser for Desolator
+"""
 
-import requests,os,re,pycountry
-from datetime import datetime
+import os
+import json
+import requests
+import urllib3
+import re
+import pycountry
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import stdlog, errlog, appender
+from urllib.parse import urljoin
+from datetime import datetime, timezone
+from shared_utils import appender, stdlog, errlog
 
-# Load env
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# Source URL
-URL = "http://po4tq2brx4rgwbdx4mac24fz34uuuf7oigosebp32n2462m2vxl6biqd.onion"
-API = URL + "/api/victims?page=1&rowsPerPage=50"
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
+proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
+target_group_name = "desolator"
+api_endpoint_suffix = "api/victims?page=1&rowsPerPage=50"
+
+# Disable the warning about certificate verification
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Dynamic proxy settings
+proxies = {
+    'http': proxy_address.replace('socks5://', 'socks5h://'),
+    'https': proxy_address.replace('socks5://', 'socks5h://')
 }
 
-
-def fetch_data():
+def get_base_urls():
     try:
-        r = requests.get(API, proxies=PROXIES, timeout=60)
-        r.raise_for_status()
-        return r.json()
+        groups_file = db_dir / "groups.json"
+        if not groups_file.exists():
+            return []
+        with open(groups_file, 'r', encoding='utf-8') as file:
+            groups_data = json.load(file)
+        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
+        if group and group.get('locations'):
+            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
     except Exception as e:
-        errlog(f"[{group_name}] ❌ Error fetching data: {e}")
-        return {}
+        errlog(f"Error reading groups.json: {e}")
+    return []
 
 def convert_date(date_str):
     if not date_str:
-        return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%dT%H:%M")
         return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        return date_str
 
 def clean_victim_name(display_name):
     if not display_name:
@@ -54,45 +73,37 @@ def extract_country_code(display_name):
     try:
         country = pycountry.countries.lookup(country_name)
         return country.alpha_2
-    except LookupError:
+    except:
         return country_name
 
-
 def main():
-    script_path = os.path.abspath(__file__)
-    if os.path.islink(script_path):
-        original_path = os.readlink(script_path)
-        if not os.path.isabs(original_path):
-            original_path = os.path.join(os.path.dirname(script_path), original_path)
-        group_name = os.path.basename(original_path).replace('.py','')
-    else:
-        group_name = os.path.basename(script_path).replace('.py','')
-    group_name = group_name.replace('-api','')
+    base_urls = get_base_urls()
+    if not base_urls:
+        stdlog(f"No enabled locations found for {target_group_name} in DB.")
+        base_urls = ['http://po4tq2brx4rgwbdx4mac24fz34uuuf7oigosebp32n2462m2vxl6biqd.onion']
 
-    data = fetch_data()
-    if not data:
-        return
-
-
-    victims = data.get("victims", [])
-    for entry in victims:
-        victim = entry.get("display_name") or ""
-        description = f"Status: {entry.get('status','')} | Expiration: {entry.get('expiration_date','')}"
-        website = ""
-        post_url = f"{URL}/victim/{entry.get('victim_id')}"
-        published = convert_date(entry.get("infection_date")) or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        country = extract_country_code(entry.get("display_name")) or ""
-
-        appender(
-            victim=clean_victim_name(victim),
-            group_name=group_name,
-            description=description,
-            website=website,
-            published=published,
-            post_url=post_url,
-            country=country
-        )
-
+    for base_url in base_urls:
+        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
+        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
+        
+        try:
+            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
+            if response.status_code == 200:
+                data = response.json()
+                victims = data.get("victims", [])
+                for entry in victims:
+                    victim = entry.get("display_name") or ""
+                    description = f"Status: {entry.get('status','')} | Expiration: {entry.get('expiration_date','')}"
+                    post_url = urljoin(base_url + '/', f"victim/{entry.get('victim_id')}")
+                    published = convert_date(entry.get("infection_date"))
+                    country = extract_country_code(entry.get("display_name"))
+                    
+                    appender(clean_victim_name(victim), target_group_name, description, "", published, post_url, country)
+                return
+            else:
+                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+        except Exception as e:
+            errlog(f"Desolator API Error for {base_url}: {e}")
 
 if __name__ == "__main__":
     main()

@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('8base-'):
                 html_doc=tmp_dir /  filename
-                file=open(html_doc,'r')
+                file=open(html_doc,'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name=soup.find_all('div', class_='list-group-item')
                 for div in divs_name:

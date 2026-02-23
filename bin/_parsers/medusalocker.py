@@ -26,7 +26,7 @@ def main():
         try:
             if filename.startswith('medusalocker-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 articles = soup.find_all('article')
                 for article in articles:

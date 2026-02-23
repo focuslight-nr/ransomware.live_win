@@ -42,7 +42,7 @@ def main():
     for filename in os.listdir(tmp_dir):
         if filename.startswith(group_name+'-'):
             html_doc=tmp_dir / filename
-            file=open(html_doc,'r')
+            file=open(html_doc, 'r', encoding='utf-8')
             soup = BeautifulSoup(file, "html.parser")
             breaches = soup.find('ol').find_all('li')
             for breach in breaches:

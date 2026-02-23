@@ -8,7 +8,10 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os,datetime,sys
+import os
+from urllib.parse import urljoin
+import sys
+import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
@@ -45,7 +48,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc,'r')
+                file=open(html_doc, 'r', encoding='utf-8')
                 soup = BeautifulSoup(file, 'html.parser')
                 cards = soup.select('div.listing a.card')
 
@@ -75,7 +78,7 @@ def main():
                     except:
                         formatted_date = ''
                     # link= find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))#  + link
-                    link = "http://nerqnacjmdy3obvevyol7qhazkwkv57dwqvye5v46k5bcujtfa6sduad.onion" + link 
+                    link = urljoin("http://nerqnacjmdy3obvevyol7qhazkwkv57dwqvye5v46k5bcujtfa6sduad.onion", link) 
                     
 
                     appender(title, group_name, description,title,formatted_date,link )
