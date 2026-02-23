@@ -169,8 +169,7 @@ Before you can scrape a new ransomware group, you must register it in the system
 
 2.  **Add the group:** Use the `manage.py` script to add the group and its leak site URL.
     ```bash
-    cd bin
-    python manage.py --add "GroupName" "http://group-leak-site.onion"
+    python bin/manage.py --add "GroupName" "http://group-leak-site.onion"
     ```
     Replace `"GroupName"` with the name of the group (e.g., "lockbit3") and the URL with their leak site address.
 
@@ -178,21 +177,19 @@ Before you can scrape a new ransomware group, you must register it in the system
 
 This script reads the sites from `db/groups.json` and downloads their content into the `/tmp` directory.
 ```bash
-cd bin
-python scrape.py
+python bin/scrape.py
 ```
 
 ### Parse Collected Data
 
 This script finds the appropriate parser in `bin/_parsers` and processes the downloaded files from `/tmp` into the main `db/victims.json` database.
 ```bash
-cd bin
-python parse.py
+python bin/parse.py
 ```
 
 You can also parse a specific group:
 ```bash
-python parse.py --group GroupName
+python bin/parse.py --group GroupName
 ```
 
 ### Checking Process Status (`status.py`)
