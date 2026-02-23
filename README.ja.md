@@ -170,8 +170,7 @@ TOR_TORRC_PATH=/etc/tor/torrc # オプション
 
 2.  **グループの追加:** `manage.py` スクリプトを使って、グループとそのリークサイトのURLを追加します。
     ```bash
-    cd bin
-    python manage.py --add "GroupName" "http://group-leak-site.onion"
+    python bin/manage.py --add "GroupName" "http://group-leak-site.onion"
     ```
     `"GroupName"` をグループ名（例: "lockbit3"）に、URLをリークサイトのアドレスに置き換えてください。
 
@@ -179,21 +178,19 @@ TOR_TORRC_PATH=/etc/tor/torrc # オプション
 
 このスクリプトは `db/groups.json` からサイトを読み込み、そのコンテンツを `/tmp` ディレクトリにダウンロードします。
 ```bash
-cd bin
-python scrape.py
+python bin/scrape.py
 ```
 
 ### 収集したデータの解析
 
 このスクリプトは `bin/_parsers` から適切なパーサーを見つけ、`/tmp` からダウンロードしたファイルをメインの `db/victims.json` データベースに処理します。
 ```bash
-cd bin
-python parse.py
+python bin/parse.py
 ```
 
 特定のグループを解析することもできます:
 ```bash
-python parse.py --group GroupName
+python bin/parse.py --group GroupName
 ```
 
 ### 稼働状況の確認 (`status.py`)
