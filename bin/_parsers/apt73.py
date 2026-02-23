@@ -32,22 +32,23 @@ def main():
                 stdlog(f'Parsing: {html_doc}')
                 soup = BeautifulSoup(file, 'html.parser')
                 segment_box = soup.find('div', class_='segment__box')
-                for segment in segment_box.find_all('div', class_='segment'):
-                    link = segment.get('onclick').split("'")[1] if segment.get('onclick') else None
-                    victim = segment.find('div', class_='segment__text__off').text.strip() if segment.find('div', class_='segment__text__off') else None
-                    post_url = urljoin("http://basherq53eniermxovo3bkduw5qqq5bkqcml3qictfmamgvmzovykyqd.onion", str(link))
-                    description = segment.find('div', class_='segment__text__dsc').text.strip() if segment.find('div', class_='segment__text__dsc') else None
-                    date_info = segment.find('div', class_='segment__date__deadline').text.strip() if segment.find('div', class_='segment__date__deadline') else None
-                    date_text = date_info.replace('UTC +0', '').strip()
-                    try:
-                        date_obj = datetime.strptime(date_text, '%Y/%m/%d %H:%M:%S')
-                        date = date_obj.strftime('%Y-%m-%d %H:%M:%S.%f')
-                        current_datetime = datetime.now()
-                        if date_obj > current_datetime:
-                            date = ''
-                    except:
-                        date =''
-                    victim = re.sub(r'\s*PART[0-9]$', '', victim).replace(' SOLD','').replace('|','').strip()
-                    appender(str(victim).replace('[\'','').replace('\']',''),'apt73',description,'',date,post_url)
+                if segment_box:
+                    for segment in segment_box.find_all('div', class_='segment'):
+                        link = segment.get('onclick').split("'")[1] if segment.get('onclick') else None
+                        victim = segment.find('div', class_='segment__text__off').text.strip() if segment.find('div', class_='segment__text__off') else None
+                        post_url = urljoin("http://basherq53eniermxovo3bkduw5qqq5bkqcml3qictfmamgvmzovykyqd.onion", str(link))
+                        description = segment.find('div', class_='segment__text__dsc').text.strip() if segment.find('div', class_='segment__text__dsc') else None
+                        date_info = segment.find('div', class_='segment__date__deadline').text.strip() if segment.find('div', class_='segment__date__deadline') else None
+                        date_text = date_info.replace('UTC +0', '').strip()
+                        try:
+                            date_obj = datetime.strptime(date_text, '%Y/%m/%d %H:%M:%S')
+                            date = date_obj.strftime('%Y-%m-%d %H:%M:%S.%f')
+                            current_datetime = datetime.now()
+                            if date_obj > current_datetime:
+                                date = ''
+                        except:
+                            date =''
+                        victim = re.sub(r'\s*PART[0-9]$', '', victim).replace(' SOLD','').replace('|','').strip()
+                        appender(str(victim).replace('[\'','').replace('\']',''),'apt73',description,'',date,post_url)
         except Exception as e:
-            errlog('atp73' + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)
+            errlog('apt73' + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)

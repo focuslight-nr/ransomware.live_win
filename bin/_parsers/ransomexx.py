@@ -44,8 +44,10 @@ def main():
             html_doc=tmp_dir / filename
             file=open(html_doc, 'r', encoding='utf-8')
             soup = BeautifulSoup(file, "html.parser")
-            breaches = soup.find('ol').find_all('li')
-            for breach in breaches:
+            ol_tag = soup.find('ol')
+            if ol_tag:
+                breaches = ol_tag.find_all('li')
+                for breach in breaches:
                 try:
                     title_tag = breach.find('h4').find('a')
                     title = title_tag.text.strip()

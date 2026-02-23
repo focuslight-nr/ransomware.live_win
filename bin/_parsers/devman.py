@@ -28,8 +28,10 @@ def main():
                 html_doc=tmp_dir /  filename
                 file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
-                rows = soup.find_all('table')[0].find_all('tr')[1:]
-                for row in rows:
+                tables = soup.find_all('table')
+                if tables:
+                    rows = tables[0].find_all('tr')[1:]
+                    for row in rows:
                     cols = row.find_all('td')
                     victim = cols[0].get_text(strip=True)
                     victim =  re.sub(r'\([^)]*\)', '', victim)

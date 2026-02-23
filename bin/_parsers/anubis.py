@@ -47,7 +47,8 @@ def main():
                 file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
                 victims_div = soup.find("div", class_="row bg-secondary p-3 rounded-4 roboto")
-                for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):
+                if victims_div:
+                    for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):
                     name_tag = victim_div.find("h5", class_="fw-bold mb-2")
                     victim = name_tag.get_text(strip=True) if name_tag else ""
                     description_tag = name_tag.find_next_sibling("h5") if name_tag else None
