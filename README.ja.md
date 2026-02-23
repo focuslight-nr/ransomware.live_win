@@ -77,6 +77,11 @@ pip install -r requirements.txt
 pip install -r requirements-windows.txt
 ```
 
+Playwright をインストールしていない場合はインストールしてください:
+```bash
+python -m playwright install
+```
+
 ### 4. 環境設定
 詳細は下記の **設定** セクションを参照してください。
 

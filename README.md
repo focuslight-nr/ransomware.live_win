@@ -75,6 +75,10 @@ If you are running on **Windows**, also install the Windows-specific dependencie
 ```bash
 pip install -r requirements-windows.txt
 ```
+Please run the following command to install Playwright if it is not already present on your system.:
+```bash
+python -m playwright install
+```
 
 ### 4. Configure Environment
 See the **Configuration** section below for details on how to set up your `.env` file.
