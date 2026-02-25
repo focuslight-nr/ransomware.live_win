@@ -9,8 +9,6 @@ Ransomware.live は、元々 **ransomwatch** のフォークです。
 
 Ransomware.live は、データベースを維持するために、**データ収集、解析、エンリッチメント、自動化**を処理します。
 
-このリポジトリはwindows上で動作するように各種修正を行ったものです。
-
 ---
 
 ## 📌 主な機能
@@ -43,7 +41,6 @@ ransomwarelive/
 │   ├── status.py         # システムヘルスとプロセスステータス
 │   ├── rsslib.py         # (オプション) RSSフィード生成
 │   └── requirements.txt  # Pythonの依存関係
-│   └── requirements-windows.txt  # Pythonの依存関係(windows環境特価)
 │
 ├── images/               # 静的アセットとウォーターマーク
 ├── db/                   # ローカルデータベース (JSON)
@@ -57,8 +54,8 @@ ransomwarelive/
 
 ### 1. リポジトリをクローン
 ```bash
-git clone https://github.com/focuslight-nr/ransomware.live_win.git
-cd ransomware.live_win
+git clone https://github.com/JMousqueton/ransomware.live.git
+cd ransomwarelive
 ```
 
 ### 2. 仮想環境の作成
@@ -75,11 +72,6 @@ pip install -r requirements.txt
 **Windows** 環境で実行している場合は、追加で Windows 専用の依存関係もインストールしてください：
 ```bash
 pip install -r requirements-windows.txt
-```
-
-Playwright をインストールしていない場合はインストールしてください:
-```bash
-python -m playwright install
 ```
 
 ### 4. 環境設定
@@ -175,7 +167,8 @@ TOR_TORRC_PATH=/etc/tor/torrc # オプション
 
 2.  **グループの追加:** `manage.py` スクリプトを使って、グループとそのリークサイトのURLを追加します。
     ```bash
-    python bin/manage.py --add "GroupName" "http://group-leak-site.onion"
+    cd bin
+    python manage.py --add "GroupName" "http://group-leak-site.onion"
     ```
     `"GroupName"` をグループ名（例: "lockbit3"）に、URLをリークサイトのアドレスに置き換えてください。
 
@@ -183,19 +176,21 @@ TOR_TORRC_PATH=/etc/tor/torrc # オプション
 
 このスクリプトは `db/groups.json` からサイトを読み込み、そのコンテンツを `/tmp` ディレクトリにダウンロードします。
 ```bash
-python bin/scrape.py
+cd bin
+python scrape.py
 ```
 
 ### 収集したデータの解析
 
 このスクリプトは `bin/_parsers` から適切なパーサーを見つけ、`/tmp` からダウンロードしたファイルをメインの `db/victims.json` データベースに処理します。
 ```bash
-python bin/parse.py
+cd bin
+python parse.py
 ```
 
 特定のグループを解析することもできます:
 ```bash
-python bin/parse.py --group GroupName
+python parse.py --group GroupName
 ```
 
 ### 稼働状況の確認 (`status.py`)
@@ -262,12 +257,37 @@ python bin/victims-browser.py
 
 **機能:**
 - **効率的:** 未撮影の被害者のみを対象にします。
-- **安定:** 1件ずつ順番に処理することで、Tor ネットワークへの過負荷（接続拒否エラー等）を防ぎます。
+- **安定:** 1件ずつ順番 enterprise に処理することで、Tor ネットワークへの過負荷（接続拒否エラー等）を防ぎます。
 - **Torの自動管理:** `.env` の設定に従い、実行時のみ Tor を自動起動・終了させることが可能です。
 
 **使用方法:**
 ```shell
 python bin/mass_capture.py
+```
+
+### RSSフィードの生成 (`rsslib.py`)
+
+Ransomware.live Webサイト用のRSSフィード（XMLファイル）を生成します。ランサムウェア被害者情報と、最近のサイバー攻撃ニュースの2種類のフィードを作成できます。
+
+**機能:**
+- **被害者フィード:** `victims.json` から最新200件の被害者情報を含む `rss.xml` を生成します。
+- **サイバー攻撃ニュースフィード:** 外部ソースからデータを取得し、最近のサイバー攻撃に関する `cyberattacks.xml` を生成します。
+- **単体実行:** 手動で特定のフィードのみを更新することが可能です。
+
+**使用方法:**
+すべてのフィードを生成する場合:
+```shell
+python bin/rsslib.py --all
+```
+
+被害者フィードのみを生成する場合:
+```shell
+python bin/rsslib.py --victims
+```
+
+サイバー攻撃ニュースフィードのみを生成する場合:
+```shell
+python bin/rsslib.py --cyberattacks
 ```
 
 ### データ管理

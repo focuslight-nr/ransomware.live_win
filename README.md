@@ -1,6 +1,6 @@
 ![Ransomware.live Logo](.github/ransomware.live.png)
 
-# Ransomware.live for windows
+# Ransomware.live
 
 Ransomware.live is originally a fork of **ransomwatch**.
 It is a ransomware leak site monitoring tool that scrapes entries from various ransomware leak sites and publishes them.
@@ -8,8 +8,6 @@ It is a ransomware leak site monitoring tool that scrapes entries from various r
 🔗 GitHub repository: [https://github.com/JMousqueton/ransomware.live](https://github.com/JMousqueton/ransomware.live)
 
 Ransomware.live handles **data collection, parsing, enrichment, and automation** to maintain the database.
-
-This repository contains various fixes to ensure it runs on Windows.
 
 ---
 
@@ -43,7 +41,6 @@ ransomwarelive/
 │   ├── status.py         # System health and process status
 │   ├── rsslib.py         # (Optional) RSS feed generation
 │   └── requirements.txt  # Python dependencies
-│   └── requirements-windows.txt  # Python dependencies for windows
 │
 ├── db/                   # Local databases (JSON)
 ├── tmp/                  # Temporary working files
@@ -56,8 +53,8 @@ ransomwarelive/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/focuslight-nr/ransomware.live_win.git
-cd ransomware.live_win
+git clone https://github.com/JMousqueton/ransomware.live.git
+cd ransomwarelive
 ```
 
 ### 2. Create a Virtual Environment
@@ -74,10 +71,6 @@ pip install -r requirements.txt
 If you are running on **Windows**, also install the Windows-specific dependencies:
 ```bash
 pip install -r requirements-windows.txt
-```
-Please run the following command to install Playwright if it is not already present on your system.:
-```bash
-python -m playwright install
 ```
 
 ### 4. Configure Environment
@@ -173,7 +166,8 @@ Before you can scrape a new ransomware group, you must register it in the system
 
 2.  **Add the group:** Use the `manage.py` script to add the group and its leak site URL.
     ```bash
-    python bin/manage.py --add "GroupName" "http://group-leak-site.onion"
+    cd bin
+    python manage.py --add "GroupName" "http://group-leak-site.onion"
     ```
     Replace `"GroupName"` with the name of the group (e.g., "lockbit3") and the URL with their leak site address.
 
@@ -181,19 +175,21 @@ Before you can scrape a new ransomware group, you must register it in the system
 
 This script reads the sites from `db/groups.json` and downloads their content into the `/tmp` directory.
 ```bash
-python bin/scrape.py
+cd bin
+python scrape.py
 ```
 
 ### Parse Collected Data
 
 This script finds the appropriate parser in `bin/_parsers` and processes the downloaded files from `/tmp` into the main `db/victims.json` database.
 ```bash
-python bin/parse.py
+cd bin
+python parse.py
 ```
 
 You can also parse a specific group:
 ```bash
-python bin/parse.py --group GroupName
+python parse.py --group GroupName
 ```
 
 ### Checking Process Status (`status.py`)
@@ -266,6 +262,31 @@ This script scans the `victims.json` database and automatically captures screens
 **Usage:**
 ```shell
 python bin/mass_capture.py
+```
+
+### RSS Feed Generation (`rsslib.py`)
+
+This script generates RSS feeds (XML files) for the Ransomware.live website. It can generate feeds for both ransomware victims and recent cyber attack news.
+
+**Features:**
+- **Victims Feed:** Generates `rss.xml` from the `victims.json` database, including the 200 most recent victims with links and image enclosures.
+- **Cyber Attacks Feed:** Generates `cyberattacks.xml` by fetching data from external cyber attack monitoring sources.
+- **Stand-alone Execution:** Can be run manually to update specific feeds.
+
+**Usage:**
+To generate both feeds:
+```shell
+python bin/rsslib.py --all
+```
+
+To generate only the victims feed:
+```shell
+python bin/rsslib.py --victims
+```
+
+To generate only the cyber attacks feed:
+```shell
+python bin/rsslib.py --cyberattacks
 ```
 
 ### Manage Data
