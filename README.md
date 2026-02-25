@@ -54,7 +54,7 @@ ransomware.live_win/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/ransomware.live_win.git
+git clone https://github.com/focuslight-nr/ransomware.live_win.git
 cd ransomware.live_win
 ```
 
