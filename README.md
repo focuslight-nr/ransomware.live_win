@@ -1,13 +1,13 @@
 ![Ransomware.live Logo](.github/ransomware.live.png)
 
-# Ransomware.live
+# Ransomware.live_win
 
-Ransomware.live is originally a fork of **ransomwatch**.
+**Ransomware.live_win** is a Windows-optimized fork of **Ransomware.live** (which is originally a fork of **ransomwatch**).
 It is a ransomware leak site monitoring tool that scrapes entries from various ransomware leak sites and publishes them.
 
-🔗 GitHub repository: [https://github.com/JMousqueton/ransomware.live](https://github.com/JMousqueton/ransomware.live)
+🔗 Original GitHub repository: [https://github.com/JMousqueton/ransomware.live](https://github.com/JMousqueton/ransomware.live)
 
-Ransomware.live handles **data collection, parsing, enrichment, and automation** to maintain the database.
+Ransomware.live_win handles **data collection, parsing, enrichment, and automation** to maintain the database on Windows systems.
 
 ---
 
@@ -19,13 +19,14 @@ Ransomware.live handles **data collection, parsing, enrichment, and automation**
 - **Image capture** of leak site posts with watermarking, metadata, and optional face blurring
 - **Notifications** via ntfy and Bluesky servers
 - **Environment-based configuration** via `.env`
+- **Windows Optimized**: Adjusted for Windows paths and environment.
 
 ---
 
 ## 📂 Repository Structure
 
 ```
-ransomwarelive/
+ransomware.live_win/
 │
 ├── bin/                  # Core Python scripts and libraries
 |   ├── _parsers/         # All parsers
@@ -53,23 +54,22 @@ ransomwarelive/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/JMousqueton/ransomware.live.git
-cd ransomwarelive
+git clone https://github.com/your-username/ransomware.live_win.git
+cd ransomware.live_win
 ```
 
 ### 2. Create a Virtual Environment
 ```bash
-python3 -m venv venv
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
 source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
-```
-
-If you are running on **Windows**, also install the Windows-specific dependencies:
-```bash
 pip install -r requirements-windows.txt
 ```
 
@@ -101,7 +101,7 @@ This project uses a `.env` file to manage all configuration settings.
     *   `NTFY_ENABLED`: Set to `true` or `false` to enable or disable sending notifications via ntfy.
     *   `SCRAPE_CONCURRENCY`: Number of simultaneous scraping tasks (e.g., `1` or `3`). Default is `1`. Set higher to speed up but be careful with Tor network stability.
     *   `TOR_AUTO_MANAGE`: Set to `true` to automatically start and stop the Tor process during scraping.
-    *   `TOR_BINARY_PATH`: Path to your Tor executable (e.g., `/usr/bin/tor` or `C:\Path\To\tor.exe`).
+    *   `TOR_BINARY_PATH`: Path to your Tor executable (e.g., `C:\Path\To\tor.exe`).
     *   `TOR_TORRC_PATH`: (Optional) Path to a specific `torrc` configuration file.
     *   `USE_WATERMARK`: Set to `true` or `false` to enable or disable adding a watermark to screenshots.
     *   `WATERMARK_IMAGE_PATH`: Path to the watermark image (e.g., `/images/my-logo.png`).
@@ -115,8 +115,8 @@ If you don't want to keep the Tor service running in the background all the time
 
 ```bash
 TOR_AUTO_MANAGE=true
-TOR_BINARY_PATH=/usr/bin/tor  # or path to tor.exe on Windows
-TOR_TORRC_PATH=/etc/tor/torrc # Optional
+TOR_BINARY_PATH=C:\Path\To\tor.exe
+TOR_TORRC_PATH=C:\Path\To\torrc # Optional
 ```
 
 When enabled, `scrape.py` will:
@@ -166,25 +166,29 @@ Before you can scrape a new ransomware group, you must register it in the system
 
 2.  **Add the group:** Use the `manage.py` script to add the group and its leak site URL.
     ```bash
-    cd bin
-    python manage.py --add "GroupName" "http://group-leak-site.onion"
+    python bin/manage.py --add "GroupName" "http://group-leak-site.onion"
     ```
     Replace `"GroupName"` with the name of the group (e.g., "lockbit3") and the URL with their leak site address.
+
+**Optional: Batch Add (Experimental)**
+If you want to quickly add multiple active ransomware groups from a known list (like `deepdarkCTI`), you can use the `batch_add_groups.py` script.
+```bash
+python bin/batch_add_groups.py
+```
+*Note: This script automatically fetches active .onion URLs and adds them using `manage.py`. Manual verification of added groups is recommended.*
 
 ### Start Scraping
 
 This script reads the sites from `db/groups.json` and downloads their content into the `/tmp` directory.
 ```bash
-cd bin
-python scrape.py
+python bin/scrape.py
 ```
 
 ### Parse Collected Data
 
 This script finds the appropriate parser in `bin/_parsers` and processes the downloaded files from `/tmp` into the main `db/victims.json` database.
 ```bash
-cd bin
-python parse.py
+python bin/parse.py
 ```
 
 You can also parse a specific group:
@@ -309,7 +313,7 @@ The `manage.py` script provides several utilities for managing the database. You
 - Telegram bot credentials (used to query Hudson Rock for infostealer data)
 - ntfy server credentials (for notifications)
 - Bluesky server credentials (for notifications)
-- Unix-based environment (Linux/macOS) recommended
+- **Windows** (Optimized for win32 environment)
 
 ---
 
@@ -352,5 +356,6 @@ To add support for a new ransomware group, follow these steps:
 
 ---
 
-**Maintainer:** [Julien Mousqueton](https://www.linkedin.com/in/julienmousqueton)
+**Maintainer:** [Julien Mousqueton](https://www.linkedin.com/in/julienmousqueton) (Original)
+**Fork Maintainer:** Hideyuki Shibata
 **Website:** [https://ransomware.live](https://ransomware.live)
