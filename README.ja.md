@@ -134,13 +134,10 @@ TOR_TORRC_PATH=C:\Path\To\torrc # オプション
 
 以下のグループは、現在の静的 HTML 解析では以下の理由により解析が困難です：
 
-- **JavaScript が必須 (SPA):** `bravox`, `cry0`, `insomnia`, `kill security 3.0`。これらのサイトは React や Next.js などのフレームワークを使用しており、コンテンツの表示にブラウザ環境でのレンダリングが必要です。
+- **JavaScript が必須 (SPA):** `cry0`。これらのサイトは React や Next.js などのフレームワークを使用しており、コンテンツの表示にブラウザ環境でのレンダリングが必要です。
+- **待ち行列 / 保護:** `shinyhunters`。これらのサイトは、自動スクレイピングを妨げる待ち行列システムや保護画面を備えていることが多いです。
 - **CAPTCHA 保護:** `kyber`, `payload`。
-- **アクセス拒否:** `cloak` (403 Forbidden)。
-- **空/リダイレクト/お知らせのみ:** `kazu` (空のディレクトリ)、`blackshrantac` (リダイレクトページ)、`lockbit 4.0 control panel` (お知らせのみ)。
-- **HTML 内にデータなし:** `team underground` (静的解析に適さない構造)。
-- **認証/キーが必要:** `trident`。
-- **法執行機関により差し押さえ:** `ragnar locker`, `vanir`。
+- **中身が空 / スクレイピング失敗:** `0x thief`, `abrahams ax`。
 
 ---
 

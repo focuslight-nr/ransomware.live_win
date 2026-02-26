@@ -32,14 +32,15 @@ def main():
                 if tables:
                     rows = tables[0].find_all('tr')[1:]
                     for row in rows:
-                    cols = row.find_all('td')
-                    victim = cols[0].get_text(strip=True)
-                    victim =  re.sub(r'\([^)]*\)', '', victim)
-                    ransom = cols[1].get_text(strip=True)
-                    status = cols[2].get_text(strip=True)
-                    extra_infos = { 'ransom': ransom }
-                    
-                    appender(victim, 'devman',status,"","","",'',extra_infos)
+                        cols = row.find_all('td')
+                        victim = cols[0].get_text(strip=True)
+                        victim =  re.sub(r'\([^)]*\)', '', victim)
+                        ransom = cols[1].get_text(strip=True)
+                        status = cols[2].get_text(strip=True)
+                        extra_infos = { 'ransom': ransom }
+                        
+                        appender(victim, 'devman',status,"","","",'',extra_infos)
                 file.close()
         except Exception as e:
             errlog('devman' + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)
+

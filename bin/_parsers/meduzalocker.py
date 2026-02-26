@@ -1,5 +1,5 @@
 """
-    Parser for Ransom House
+    Parser for Meduza Locker
 """
 
 import os
@@ -20,9 +20,9 @@ home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    target_group = "ransomhouse"
+    target_group = "meduzalocker"
     for filename in os.listdir(tmp_dir):
-        if filename.startswith("ransom house-"):
+        if filename.startswith("meduza locker-"):
             html_doc = tmp_dir / filename
             stdlog(f'Parsing {target_group}: {html_doc}')
             try:
@@ -35,38 +35,36 @@ def main():
                 if base_url:
                     base_url = base_url.rstrip('/')
 
-                records = soup.find_all('div', class_='cls_record')
-                for record in records:
+                articles = soup.find_all('article', class_='company-card')
+                for article in articles:
                     try:
-                        top_div = record.find('div', class_='cls_recordTop')
-                        if not top_div:
+                        title_tag = article.find('h3')
+                        if not title_tag:
                             continue
-                        victim = top_div.get_text(strip=True)
+                        victim = title_tag.get_text(strip=True)
 
+                        # website often matches victim name if it looks like a domain
                         website = ""
-                        middle_div = record.find('div', class_='cls_recordMiddle')
-                        if middle_div:
-                            website = middle_div.get_text(strip=True)
+                        if re.search(r'[a-z0-9-]+\.[a-z]{2,6}', victim.lower()):
+                            website = victim.lower()
 
-                        # Clean website URL
-                        if website.startswith('http'):
-                            # Keep as is or extract domain
-                            pass
+                        description = ""
+                        desc_div = article.find('div', class_='company-card__desc')
+                        if desc_div:
+                            description = desc_div.get_text(strip=True)
 
+                        # post_url
                         post_url = ""
-                        link_a = record.find('a', href=True)
-                        if link_a:
-                            post_url = urljoin(base_url, link_a['href']) if base_url else link_a['href']
+                        more_a = article.find('a', class_='company-card__more')
+                        if more_a:
+                            post_url = urljoin(base_url, more_a['href']) if base_url else more_a['href']
 
-                        # Date extraction
+                        # Date is not directly in the card, but might be in meta or missing
                         published = ""
-                        updated_div = record.find('div', class_='cls_recordUpdated')
-                        if updated_div:
-                            published = updated_div.get_text(strip=True)
-
-                        appender(victim, target_group, "", website, published, post_url)
+                        
+                        appender(victim, target_group, description, website, published, post_url)
                     except Exception as e:
-                        errlog(f'{target_group} - error parsing record: {e}')
+                        errlog(f'{target_group} - error parsing article: {e}')
             except Exception as e:
                 errlog(f'{target_group} - error reading file {filename}: {e}')
 

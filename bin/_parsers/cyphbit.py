@@ -9,6 +9,7 @@ from shared_utils import appender, stdlog, errlog
 from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import urljoin
+from datetime import datetime
 
 # -------------------- CONFIG --------------------
 script_dir = Path(__file__).resolve().parent
@@ -28,8 +29,6 @@ def main():
         current_group = None
         if filename.startswith('cyphbit-'):
             current_group = 'cyphbit'
-        elif filename.startswith('ciphbit-'):
-            current_group = 'ciphbit'
             
         if current_group:
             html_doc = tmp_dir / filename
@@ -47,17 +46,30 @@ def main():
                             continue
                         victim = title_tag.text.strip()
                         
+                        if victim.lower() in ["become affiliate", "become an affiliate"]:
+                            continue
+
                         desc_tag = card.find('div', class_='post-body')
                         description = desc_tag.text.strip() if desc_tag else ""
                         
                         date_tag = card.find('div', class_='post-meta')
-                        published = date_tag.text.strip() if date_tag else ""
-                        
+                        published_str = date_tag.text.strip() if date_tag else ""
+                        published = ""
+                        if published_str:
+                             try:
+                                 published = datetime.strptime(published_str, "%b %d, %Y").strftime("%Y-%m-%d %H:%M:%S.%f")
+                             except:
+                                 pass
+
                         link_tag = title_tag.find('a', href=True)
                         post_url = urljoin(base_url, link_tag['href']) if link_tag else ""
                         
+                        website = ""
+                        if post_url and not post_url.endswith('.onion'):
+                            website = post_url
+
                         # Register using the specific group name (cyphbit or ciphbit)
-                        appender(victim, current_group, description, "", published, post_url)
+                        appender(victim, current_group, description, website, published, post_url)
                     except Exception as e:
                         errlog(f'{current_group} - error parsing card: {e}')
             except Exception as e:
@@ -65,3 +77,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -133,8 +133,10 @@ When enabled, `scrape.py` will:
 
 The following groups are currently difficult to parse using static HTML analysis for the reasons listed below:
 
-- **JavaScript Required (SPA):** `bravox`, `cry0`, `insomnia`, `kill security 3.0`. These sites use frameworks like React or Next.js and require a full browser environment to render content.
+- **JavaScript Required (SPA):** `cry0`. These sites use frameworks like React, Angular, or Next.js and require a full browser environment to render content.
+- **Access Queue / Protected:** `shinyhunters`. These sites often have a waiting room or queue system that prevents automated scraping of the actual content.
 - **CAPTCHA Protected:** `kyber`, `payload`.
+- **Empty / Scrape Failure:** `0x thief`, `abrahams ax`.
 - **Access Denied:** `cloak` (403 Forbidden).
 - **Empty/Redirect/Announcement Only:** `kazu` (empty directory), `blackshrantac` (redirect page), `lockbit 4.0 control panel` (announcement only).
 - **Data missing from HTML:** `team underground` (non-standard structure for static parsing).
