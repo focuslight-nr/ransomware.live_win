@@ -73,7 +73,13 @@ pip install -r requirements.txt
 pip install -r requirements-windows.txt
 ```
 
-### 4. Configure Environment
+### 4. Install Playwright Browsers
+This project uses Playwright for scraping and screenshots. You must install the required browser binaries (Firefox is recommended for Tor compatibility):
+```bash
+playwright install firefox
+```
+
+### 5. Configure Environment
 See the **Configuration** section below for details on how to set up your `.env` file.
 
 ---
@@ -131,17 +137,15 @@ When enabled, `scrape.py` will:
 
 ### ⚠️ Known Unparseable Groups
 
-The following groups are currently difficult to parse using static HTML analysis for the reasons listed below:
+The following groups are currently difficult to scrape or parse automatically for the reasons listed below:
 
-- **JavaScript Required (SPA):** `cry0`. These sites use frameworks like React, Angular, or Next.js and require a full browser environment to render content.
-- **Access Queue / Protected:** `shinyhunters`. These sites often have a waiting room or queue system that prevents automated scraping of the actual content.
+- **JavaScript / Rendering Required:** `cry0`. Some SPA sites require full browser rendering before data is visible.
+- **Access Queue / DDoS Protection:** `shinyhunters`. These sites often use waiting rooms (Access Queue) that prevent automated scraping of the actual content.
 - **CAPTCHA Protected:** `kyber`, `payload`.
-- **Empty / Scrape Failure:** `0x thief`, `abrahams ax`.
+- **Empty / Scrape Failure:** `0x thief`, `abrahams ax`. Usually occurs when the host itself is down.
 - **Access Denied:** `cloak` (403 Forbidden).
-- **Empty/Redirect/Announcement Only:** `kazu` (empty directory), `blackshrantac` (redirect page), `lockbit 4.0 control panel` (announcement only).
-- **Data missing from HTML:** `team underground` (non-standard structure for static parsing).
-- **Authentication/Key Required:** `trident`.
-- **Seized by Law Enforcement:** `ragnar locker`, `vanir`.
+- **Announcement Only / Empty Directory:** `kazu`, `blackshrantac`, `lockbit 4.0 control panel`.
+- **Seized by Law Enforcement:** `ragnar locker`, `vanir`, `radar` (FBI/EU seizures).
 
 ---
 
