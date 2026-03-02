@@ -10,35 +10,32 @@ from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, 
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent.parent
+env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "kill security 3.0"
+    group_name = "killsecurity3.0"
+    stdlog(f"Processing group: {group_name}")
 
     for filename in os.listdir(tmp_dir):
         if filename.startswith(group_name + '-'):
             html_doc = tmp_dir / filename
-            with open(html_doc, 'r', encoding='utf-8') as file:
-                soup = BeautifulSoup(file, "html.parser")
+            stdlog(f"Parsing: {html_doc}")
+            try:
+                with open(html_doc, 'r', encoding='utf-8') as file:
+                    soup = BeautifulSoup(file, "html.parser")
                 
-                # The HTML structure for Kill Security 3.0
-                # <div class="... h-[200px] ...">
-                #   ...
-                #   <span class="... text-xl ...">Victim Name</span>
-                #   <span class="... text-[10px] ...">website.com</span>
-                #   ...
-                #   <div class="flex-1 ...">Description</div>
-                # </div>
-                
-                # Search for divs that likely contain victim cards
+                # Victim cards are in divs with h-[200px] class
                 victim_divs = soup.find_all('div', class_=re.compile(r'h-\[200px\]'))
                 
                 if victim_divs:
-                    stdlog(f"Found {len(victim_divs)} victim cards for {group_name} in {filename}")
-                    
+                    stdlog(f"Found {len(victim_divs)} victim cards for {group_name}")
                     for div in victim_divs:
                         try:
                             # Title
@@ -59,11 +56,11 @@ def main():
                             if title:
                                 appender(title, group_name, description, website)
                         except Exception as e:
-                            errlog(f"{group_name} - entry parse fail: {e} in file: {filename}")
+                            errlog(f"{group_name} - entry parse fail: {e}")
                 else:
-                    # Try a different approach if no h-[200px] found
-                    # Maybe it's a different version or structure
-                    pass
+                    errlog(f"{group_name} - no victim cards found in {filename}")
+            except Exception as e:
+                errlog(f"{group_name} - error reading file {filename}: {e}")
 
 if __name__ == "__main__":
     main()

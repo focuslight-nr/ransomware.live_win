@@ -16,13 +16,18 @@ from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, 
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent.parent
+env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "brain cipher"
+    group_name = "braincipher"
+    stdlog(f"Searching for files starting with '{group_name}-' in {tmp_dir}")
 
     for filename in os.listdir(tmp_dir):
         if filename.startswith(group_name + '-'):

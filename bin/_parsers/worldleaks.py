@@ -75,13 +75,13 @@ def parse_api():
     })
 
     for base_url in base_urls:
+        full_api_url = base_url + api_endpoint_suffix
         try:
             # 1. "Greeting" - Visit the top page first to initialize session/cookies
             stdlog(f"[{target_group_name}] Visiting top page to initialize session: {base_url}")
-            session.get(base_url, verify=False, timeout=60)
+            session.get(base_url, verify=False, timeout=30)
             
             # 2. Access the API with Referer header
-            full_api_url = base_url + api_endpoint_suffix
             stdlog(f"[{target_group_name}] Fetching API with session: {full_api_url}")
             
             headers = {"Referer": base_url + "/"}
@@ -181,15 +181,41 @@ def parse_files():
 
             # Try HTML parsing (BeautifulSoup)
             soup = BeautifulSoup(content, 'html.parser')
-            # Look for cards or specific Angular tags
-            cards = soup.find_all(['div', 'app-company-card'], class_=re.compile(r'card|item|company|segment', re.I))
-            for card in cards:
-                title_el = card.find(['h5', 'h4', 'div', 'span'], class_=re.compile(r'title|name|header', re.I))
-                if title_el:
+            # Look for Angular components
+            items = soup.find_all('app-company-list-item')
+            for item in items:
+                try:
+                    # Title is in div.title -> div.content
+                    title_el = item.find('div', class_='content')
+                    if not title_el:
+                        continue
                     title = title_el.get_text(strip=True)
-                    link_el = card.find('a', href=re.compile(r'/companies/'))
-                    post_url = link_el['href'] if link_el else ""
-                    appender(victim=title, group_name=target_group_name, post_url=post_url)
+                    
+                    # Link is in the parent <a> tag
+                    parent_a = item.find_parent('a', href=True)
+                    post_url = ""
+                    if parent_a:
+                        post_url = urljoin('http://worldleaksartrjm3c6vasllvgacbi5u3mgzkluehrzhk2jz4taufuid.onion/', parent_a['href'])
+                    
+                    # Other info
+                    description = ""
+                    meta_items = item.find_all('div', class_='item')
+                    for meta in meta_items:
+                        m_title = meta.find('div', class_='title')
+                        m_value = meta.find('div', class_='value')
+                        if m_title and m_value:
+                            description += f"{m_title.get_text(strip=True)}: {m_value.get_text(strip=True)}; "
+                    
+                    # Country
+                    country = ""
+                    country_el = item.find('div', class_='country')
+                    if country_el:
+                        country = country_el.get_text(strip=True)
+
+                    if title:
+                        appender(victim=title, group_name=target_group_name, description=description, post_url=post_url, country=country)
+                except Exception as e:
+                    errlog(f"[{target_group_name}] Error parsing item in {filename}: {e}")
 
         except Exception as e:
             errlog(f"[{target_group_name}] Error processing file {filename}: {e}")

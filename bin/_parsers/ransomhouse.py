@@ -22,7 +22,7 @@ tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 def main():
     target_group = "ransomhouse"
     for filename in os.listdir(tmp_dir):
-        if filename.startswith("ransom house-"):
+        if filename.startswith("ransomhouse-"):
             html_doc = tmp_dir / filename
             stdlog(f'Parsing {target_group}: {html_doc}')
             try:
@@ -48,21 +48,29 @@ def main():
                         if middle_div:
                             website = middle_div.get_text(strip=True)
 
-                        # Clean website URL
-                        if website.startswith('http'):
-                            # Keep as is or extract domain
-                            pass
-
                         post_url = ""
                         link_a = record.find('a', href=True)
                         if link_a:
                             post_url = urljoin(base_url, link_a['href']) if base_url else link_a['href']
 
-                        # Date extraction
+                        # Date extraction from "Action date:"
                         published = ""
-                        updated_div = record.find('div', class_='cls_recordUpdated')
-                        if updated_div:
-                            published = updated_div.get_text(strip=True)
+                        bottom_elements = record.find_all('div', class_='cls_recordBottomElement')
+                        for element in bottom_elements:
+                            label_div = element.find('div', class_='cls_headerSmall')
+                            if label_div and "Action date" in label_div.get_text():
+                                # The date is in the next div
+                                val_div = label_div.find_next_sibling('div')
+                                if val_div:
+                                    published_str = val_div.get_text(strip=True)
+                                    try:
+                                        # Convert DD/MM/YYYY to YYYY-MM-DD
+                                        from datetime import datetime
+                                        dt = datetime.strptime(published_str, "%d/%m/%Y")
+                                        published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                                    except:
+                                        published = published_str
+                                break
 
                         appender(victim, target_group, "", website, published, post_url)
                     except Exception as e:

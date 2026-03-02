@@ -230,8 +230,8 @@ async def take_screenshot_victim(url):
 
     async with async_playwright() as p:
         try:
-            browser = await p.chromium.launch(proxy={"server": TOR_PROXY}, headless=True)
-            context = await browser.new_context(ignore_https_errors=True)
+            browser = await p.firefox.launch(proxy={"server": TOR_PROXY}, headless=True)
+            context = await browser.new_context(proxy={"server": TOR_PROXY}, ignore_https_errors=True)
             page = await context.new_page()
 
             print(f"[+] Navigating to {url} via Tor...")
@@ -495,9 +495,13 @@ def clean_slug(url):
 def sanitize_filename(name):
     """
     Sanitize a string to be used as a filename.
-    Removes or replaces characters that are not allowed in filenames.
+    Removes or replaces characters that are not allowed in filenames and removes spaces.
     """
-    return re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Remove characters not allowed in filenames
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Remove spaces to maintain consistency with parsers
+    name = name.replace(' ', '')
+    return name
 
 def safe_slug(name: str) -> str:
     """
@@ -529,16 +533,14 @@ async def victim_screenshot(post_url, group_name, victim):
     watermark_path = Path(os.path.join(home, os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")))
 
     async with async_playwright() as playwright:
-        '''
-        browser = await playwright.chromium.launch(headless=True)
-        context = await browser.new_context(proxy={"server": proxy})
-        '''
-        browser = await playwright.chromium.launch(
-        #browser = await p.firefox.launch(
+        browser = await playwright.firefox.launch(
             proxy={"server": proxy},
             headless=True
         )
-        context = await browser.new_context(ignore_https_errors=True)
+        context = await browser.new_context(
+            proxy={"server": proxy},
+            ignore_https_errors=True
+        )
 
         page = await context.new_page()
         

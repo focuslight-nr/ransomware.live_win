@@ -488,11 +488,15 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
 async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            proxy={"server": proxy_address},
-            headless=True
+        # Firefox sometimes handles Tor/SOCKS5 better than Chromium on Windows
+        browser = await p.firefox.launch(
+            headless=True,
+            proxy={"server": proxy_address}
         )
-        context = await browser.new_context(ignore_https_errors=True)
+        context = await browser.new_context(
+            proxy={"server": proxy_address},
+            ignore_https_errors=True
+        )
 
         await context.set_extra_http_headers({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",

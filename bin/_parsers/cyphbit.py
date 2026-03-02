@@ -29,6 +29,8 @@ def main():
         current_group = None
         if filename.startswith('cyphbit-'):
             current_group = 'cyphbit'
+        elif filename.startswith('ciphbit-'):
+            current_group = 'ciphbit'
             
         if current_group:
             html_doc = tmp_dir / filename
@@ -57,18 +59,21 @@ def main():
                         published = ""
                         if published_str:
                              try:
-                                 published = datetime.strptime(published_str, "%b %d, %Y").strftime("%Y-%m-%d %H:%M:%S.%f")
-                             except:
+                                 # Trim any leading/trailing space or characters
+                                 clean_date = published_str.strip()
+                                 published = datetime.strptime(clean_date, "%b %d, %Y").strftime("%Y-%m-%d %H:%M:%S.%f")
+                             except Exception as dt_err:
+                                 # Fallback for different formats or extra text
                                  pass
 
                         link_tag = title_tag.find('a', href=True)
                         post_url = urljoin(base_url, link_tag['href']) if link_tag else ""
                         
                         website = ""
-                        if post_url and not post_url.endswith('.onion'):
-                            website = post_url
+                        # If post_url is external, use it as website
+                        if post_url and not post_url.startswith('http://') and not post_url.startswith('https://'):
+                             pass # Relative or onion
 
-                        # Register using the specific group name (cyphbit or ciphbit)
                         appender(victim, current_group, description, website, published, post_url)
                     except Exception as e:
                         errlog(f'{current_group} - error parsing card: {e}')

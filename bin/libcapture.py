@@ -117,7 +117,10 @@ async def screenshot_onion(url: str) -> str:
     final_path = os.path.join(OUTPUT_DIR, f"{md5_base}.png")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.firefox.launch(
+            headless=True,
+            proxy={"server": TOR_PROXY}
+        )
         context = await browser.new_context(
             proxy={"server": TOR_PROXY},
             viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
@@ -197,7 +200,10 @@ async def screenshot_onion_with_path(url: str, final_path: str) -> str:
     simplewait = decide_simplewait(url)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.firefox.launch(
+            headless=True,
+            proxy={"server": TOR_PROXY}
+        )
         context = await browser.new_context(
             proxy={"server": TOR_PROXY},
             viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},

@@ -105,18 +105,23 @@ def siteappender(name, location):
     wait_for_lock(lock_file_path)  # Wait for the lock to disappear
     
     groups = openjson(GROUPS_FILE)
-    success = False
+    group_found = False
+    location_added = False
     for group in groups:
         if group['name'] == name:
-            if siteschema(location) not in group['locations']:
+            group_found = True
+            # Check if the location (slug) already exists in the group's locations
+            if not any(loc['slug'] == location for loc in group['locations']):
                 group['locations'].append(siteschema(location))
-                success = True
+                location_added = True
+            else:
+                stdlog(f"Ransomware.live: Location '{location}' already exists for group '{name}'. Skipping.")
             break
 
-    if success:
+    if location_added:
         write_to_file(groups, GROUPS_FILE)
         stdlog(f"Ransomware.live: Appended location to group '{name}'.")
-    else:
+    elif not group_found:
         errlog(f"Ransomware.live: Group '{name}' does not exist. Cannot append location.")
 
 def wait_for_lock(lock_file_path, check_interval=5):
@@ -277,6 +282,7 @@ def main():
 
     # Handling options
     if args.append:
+        name, location = args.append
         name = name.strip('"').lower() # Convert to lowercase
         location = location.strip('"')
         siteappender(name, location)

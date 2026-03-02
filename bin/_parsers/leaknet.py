@@ -30,16 +30,24 @@ def main():
                         match = re.search(r'JSON\.parse\(`(.*?)`\)', script.string, re.DOTALL)
                         if match:
                             json_str = match.group(1)
-                            # Only replace common escape sequences that JSON.loads might struggle with in this context
-                            json_str = json_str.replace('\\\\', '\\').replace('\\"', '"').replace('\\/', '/')
+                            # Handle common escape sequences in JS template literals/JSON.parse
+                            # Instead of a simple replace, we use a more robust way to unescape
                             try:
+                                # json_str is literally "{\"key\": \"val\"}"
+                                # We need to turn it into {"key": "val"}
+                                json_str = json_str.replace('\\"', '"').replace('\\\\', '\\')
                                 data = json.loads(json_str)
                                 articles = data.get('article_list_response', {}).get('result', {}).get('data', [])
                                 for art in articles:
                                     victim = art.get('article_title', 'Unknown')
                                     description = art.get('article_brief', '')
-                                    website = art.get('article_url', '')
-                                    published = art.get('article_publish_time', '')
+                                    website = art.get('subject_site', '')
+                                    # Convert UNIX timestamp to YYYY-MM-DD HH:MM:SS.f
+                                    from datetime import datetime
+                                    ts = art.get('article_added_timestamp', 0)
+                                    published = ""
+                                    if ts:
+                                        published = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S.f')
                                     post_url = ""
                                     appender(victim, 'leaknet', description, website, published, post_url)
                             except Exception as json_err:

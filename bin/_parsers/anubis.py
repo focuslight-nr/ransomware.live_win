@@ -11,7 +11,7 @@
 import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
 from urllib.parse import urljoin
 from pathlib import Path
 from dotenv import load_dotenv
@@ -47,27 +47,35 @@ def main():
                 html_doc= tmp_dir / filename
                 file=open(html_doc, 'r', encoding='utf-8')
                 soup=BeautifulSoup(file,'html.parser')
-                victims_div = soup.find("div", class_="row bg-secondary p-3 rounded-4 roboto")
-                if victims_div:
+                # Find all victim containers directly
+                victim_items = soup.find_all("div", class_="col-sm-4 p-2")
+                if victim_items:
+                    stdlog(f"Found {len(victim_items)} items for {group_name}")
                     # Get base URL
                     md5_val = extract_md5_from_filename(str(html_doc))
                     base_url = find_slug_by_md5(group_name, md5_val)
                     if base_url:
                         base_url = base_url.rstrip('/')
 
-                    for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):
+                    for victim_div in victim_items:
                         try:
-                            name_tag = victim_div.find("h5", class_="fw-bold mb-2")
+                            # Search within the inner div
+                            inner_div = victim_div.find("div", class_="bg-secondary-2") or victim_div.find("div", class_="bg-secondary")
+                            if not inner_div:
+                                inner_div = victim_div
+
+                            name_tag = inner_div.find("h5", class_="fw-bold mb-2")
                             if not name_tag:
                                 continue
                             victim = name_tag.get_text(strip=True)
                             
                             description = ""
-                            desc_tag = victim_div.find("h5", style=re.compile(r"font-size:\s*12px"))
-                            if desc_tag:
-                                description = desc_tag.get_text(strip=True)
+                            # The description is often the second h5 or has a specific style
+                            h5_tags = inner_div.find_all("h5", class_="fw-bold mb-2")
+                            if len(h5_tags) > 1:
+                                description = h5_tags[1].get_text(strip=True)
                             
-                            link_tag = victim_div.find("a", class_="btn btn-light fw-bold w-100")
+                            link_tag = inner_div.find("a", class_=re.compile(r"btn.*"))
                             post_url = ""
                             if link_tag and link_tag.has_attr("href"):
                                 post_url = urljoin(base_url, link_tag["href"]) if base_url else link_tag["href"]
@@ -75,6 +83,8 @@ def main():
                             appender(victim, group_name, description, "", "", post_url)
                         except Exception as e:
                             errlog(f'{group_name} - error parsing victim: {e}')
+                else:
+                    errlog(f"{group_name} - no items found in {filename}")
                 file.close()
         except Exception as e:
             errlog(group_name + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)

@@ -36,44 +36,39 @@ def main():
                 if base_url:
                     base_url = base_url.rstrip('/')
 
-                # Posts are usually in div.post
+                # Posts are in div.post
                 posts = soup.find_all('div', class_='post')
                 for post in posts:
                     try:
-                        description_parts = []
-                        # Look for content within specific VKUI classes or fallback
-                        content_div = post.find('div', class_='post__header')
-                        if not content_div:
-                            content_div = post
-
-                        p_tags = post.find_all('p')
-                        for p in p_tags:
-                            p_text = p.get_text(strip=True)
-                            if p_text:
-                                description_parts.append(p_text)
+                        # Victim name is in post__header__title
+                        victim_tag = post.find('div', class_='post__header__title')
+                        victim = victim_tag.get_text(strip=True) if victim_tag else ""
                         
-                        description = " ".join(description_parts)
-                        
-                        victim = ""
-                        if description_parts:
-                            first_p = description_parts[0]
-                            match = re.match(r'^([^.]+?)\s+is\s+a\s+', first_p, re.I)
-                            if match:
-                                victim = match.group(1)
-                            else:
-                                victim = first_p[:100].split('\n')[0]
+                        if not victim or "New publication" in victim:
+                            # Skip placeholder or header-only entries
+                            continue
 
+                        # Description and Website are in post__text
+                        content_div = post.find('div', class_='post__text')
+                        description = content_div.get_text(strip=True) if content_div else ""
+                        
                         website = ""
-                        domain_match = re.search(r'([a-zA-Z0-9-]+\.[a-z]{2,6})', description)
-                        if domain_match:
-                            website = domain_match.group(1).lower()
+                        if content_div:
+                            # Try to find a link or a "Website:" pattern
+                            website_match = re.search(r'Website:\s*([a-zA-Z0-9.-]+\.[a-z]{2,6})', content_div.get_text())
+                            if website_match:
+                                website = website_match.group(1).lower()
 
+                        # Date is in span.formatted-date
                         published = ""
-                        date_cell = post.find('div', class_='post__header__date')
-                        if date_cell:
-                            date_str = date_cell.get_text(strip=True)
+                        date_tag = post.find('span', class_='formatted-date')
+                        if date_tag:
+                            date_str = date_tag.get_text(strip=True)
+                            # Format: "2026-01-29 21:07"
                             try:
-                                dt = datetime.strptime(date_str, "%d %B %Y")
+                                # Just take the date part or parse full
+                                clean_date = date_str.split(' ')[0] 
+                                dt = datetime.strptime(clean_date, "%Y-%m-%d")
                                 published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
                             except:
                                 published = date_str

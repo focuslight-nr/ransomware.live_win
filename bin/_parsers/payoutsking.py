@@ -23,7 +23,7 @@ tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 def main():
     target_group = "payoutsking"
     for filename in os.listdir(tmp_dir):
-        if filename.startswith("payouts king-"):
+        if filename.startswith("payoutsking-"):
             html_doc = tmp_dir / filename
             stdlog(f'Parsing {target_group}: {html_doc}')
             try:
@@ -48,51 +48,57 @@ def main():
 
                 # Process rows
                 rows = table_body.find_all('tr')
-                # The site uses two rows per victim (one for summary, one for expandable info)
-                # But we can iterate through all rows and pick the ones with ID
+                # The site uses rows for victims. Some might be expandable.
                 for row in rows:
-                    if not row.has_attr('id') or row.get('id') == 'table':
-                        continue
+                    cells = row.find_all('td')
+                    if len(cells) < 2: continue
                     
                     try:
-                        cells = row.find_all('td')
-                        if len(cells) < 4: continue
-
                         # Column 0: Company name (p tag with title class)
                         title_p = row.find('p', class_=re.compile(r'_title_'))
-                        victim = title_p.get_text(strip=True) if title_p else cells[0].get_text(strip=True)
+                        if not title_p:
+                            # Fallback to the first cell text
+                            victim = cells[0].get_text(strip=True)
+                        else:
+                            victim = title_p.get_text(strip=True)
                         
+                        if not victim or victim.lower() == "company": continue
+
                         # Column 1: Created date
                         published = cells[1].get_text(strip=True)
                         if published:
                             try:
+                                # Format might be YYYY-MM-DD
                                 published_dt = datetime.strptime(published, '%Y-%m-%d')
                                 published = published_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
                             except:
                                 pass
 
                         # Column 2: Website
-                        website = cells[2].get_text(strip=True)
+                        website = ""
+                        if len(cells) > 2:
+                            website = cells[2].get_text(strip=True)
                         
                         # Column 3: Country
-                        country = cells[3].get_text(strip=True)
+                        country = ""
+                        if len(cells) > 3:
+                            country = cells[3].get_text(strip=True)
 
-                        # Look ahead or lookup associated info row for description
+                        # Description and link are sometimes in dynamic expandable areas
                         description = ""
                         post_url = ""
                         
-                        # Find the next sibling row with class 'infoRow'
-                        info_row = row.find_next_sibling('tr', class_='infoRow')
-                        if info_row:
-                            # About company
-                            desc_span = info_row.find('span', class_=re.compile(r'_value_'))
-                            if desc_span:
-                                description = desc_span.get_text(strip=True)
-                            
-                            # Full info link
-                            info_link = info_row.find('a', href=True)
-                            if info_link:
-                                post_url = urljoin(base_url, info_link['href']) if base_url else info_link['href']
+                        # Check for a "data-description" or info sibling
+                        info_row = row.find_next_sibling('tr')
+                        if info_row and not info_row.find('td', recursive=False):
+                             # This might be an info block
+                             desc_el = info_row.find(class_=re.compile(r'_description_|_value_'))
+                             if desc_el:
+                                 description = desc_el.get_text(strip=True)
+                             
+                             link_el = info_row.find('a', href=True)
+                             if link_el:
+                                 post_url = urljoin(base_url, link_el['href']) if base_url else link_el['href']
 
                         appender(victim, target_group, description, website, published, post_url, country)
                     except Exception as e:
