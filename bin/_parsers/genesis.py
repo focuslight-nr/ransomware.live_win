@@ -1,73 +1,68 @@
-"""
-    Upgraded Parser for Genesis
-"""
-
-import os
+import os, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog
+from datetime import datetime
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import urljoin
 
 # -------------------- CONFIG --------------------
 script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
+project_root = script_dir.parent.parent
+env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-target_group_name = "genesis"
-base_url = "http://genesis6ixpb5mcy4kudybtw5op2wqlrkocfogbnenz3c647ibqixiad.onion"
-
 def main():
+    group_name = "genesis"
+    stdlog(f"Processing group: {group_name}")
+    
+    # Base URL for Genesis (can be fetched from metadata if needed)
+    base_url = "http://genesis6ixpb5mcy4kudybtw5op2wqlrkocfogbnenz3c647ibqixiad.onion"
+
     for filename in os.listdir(tmp_dir):
-        if filename.startswith(target_group_name + '-'):
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
+        try:
+            if filename.startswith(group_name + '-'):
+                html_doc = tmp_dir / filename
+                stdlog(f"Parsing: {html_doc}")
                 with open(html_doc, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'html.parser')
                 
-                # Hugo PaperMod theme typical structure
-                articles = soup.find_all('article', class_='post-entry')
-                if not articles:
-                    # Fallback to general article tag
-                    articles = soup.find_all('article')
-                
-                for article in articles:
+                # The items are in <section class="block-bg ...">
+                sections = soup.find_all('section', class_=re.compile(r'block-bg'))
+                for section in sections:
                     try:
-                        header = article.find('header', class_='entry-header')
-                        title_tag = header.find('h2') if header else article.find('h2')
+                        # Title is in <h2>
+                        title_tag = section.find('h2')
                         if not title_tag:
                             continue
-                        
-                        victim = title_tag.text.strip()
-                        
-                        # Link
-                        link_tag = article.find('a', class_='entry-link') or article.find('a', href=True)
-                        post_url = urljoin(base_url, link_tag['href']) if link_tag else ""
-                        
-                        # Summary
-                        summary_tag = article.find('div', class_='entry-content') or article.find('section')
-                        description = summary_tag.text.strip() if summary_tag else ""
-                        
-                        # Date
-                        footer = article.find('footer', class_='entry-footer')
-                        published = ""
-                        if footer:
-                            time_tag = footer.find('time')
-                            if time_tag and time_tag.get('datetime'):
-                                published = time_tag['datetime']
-                            else:
-                                published = footer.text.strip()
+                        title = title_tag.get_text(strip=True)
 
-                        appender(victim, target_group_name, description, "", published, post_url)
+                        # Description is in div.not-prose
+                        description = ""
+                        desc_tag = section.find('div', class_='not-prose')
+                        if desc_tag:
+                            description = desc_tag.get_text(strip=True)
+
+                        # Date is in <time>
+                        published = ""
+                        time_tag = section.find('time')
+                        if time_tag:
+                            published = time_tag.get_text(strip=True)
+
+                        # Link is in <a> with class absolute inset-0
+                        link = ""
+                        link_tag = section.find('a', href=True)
+                        if link_tag:
+                            link = urljoin(base_url, link_tag['href'])
+
+                        appender(title, group_name, description, '', published, link)
                     except Exception as e:
-                        errlog(f'{target_group_name} - error parsing item: {e}')
-            except Exception as e:
-                errlog(f'{target_group_name} - error reading file {filename}: {e}')
+                        errlog(f"{group_name} - item parse fail: {e}")
+        except Exception as e:
+            errlog(f"{group_name} - file process fail: {e} in file: {filename}")
 
 if __name__ == "__main__":
     main()

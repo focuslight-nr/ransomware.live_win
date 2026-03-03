@@ -56,6 +56,8 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 GEMINI_API_KEY= os.getenv('GEMINI_API_KEY')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'models/gemini-2.5-flash')
 
+AI_ENRICHMENT_ENABLED = os.getenv('AI_ENRICHMENT_ENABLED', 'true').lower() == 'true'
+
 HUDSONROCK_ENABLED = os.getenv('HUDSONROCK_ENABLED', 'true').lower() == 'true'
 BLUESKY_ENABLED = os.getenv('BLUESKY_ENABLED', 'true').lower() == 'true'
 NTFY_ENABLED = os.getenv('NTFY_ENABLED', 'true').lower() == 'true'
@@ -805,7 +807,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
             activity = response
 
     ## Get Website 
-    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (website is None or website == '') and description:
+    if AI_ENRICHMENT_ENABLED and (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (website is None or website == '') and description:
         stdlog(f'Querying AI for "{victim}" website')
         prompt = f'can you give me your best guess for the domain name of "{victim}" Only give me the domain name, no extract text. if you cannot guess just answer "Not Found"'
         response = query_ai(prompt)
@@ -817,7 +819,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
 
     ### Get Country 
     country = get_country(victim,description,website)
-    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (country is None or len(country) < 2) and '*' not in victim:
+    if AI_ENRICHMENT_ENABLED and (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (country is None or len(country) < 2) and '*' not in victim:
         stdlog(f'Querying AI for "{victim}" country')
         prompt = f'I would like the 2 letters code of the country, and only the 2 letters not extra text, where the this company is located : "{victim}"'
         response = query_ai(prompt)
@@ -835,7 +837,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
         
  
     ### Get Description 
-    if (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and description == '' and '*' not in victim:
+    if AI_ENRICHMENT_ENABLED and (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and description == '' and '*' not in victim:
         stdlog(f'Querying AI for "{victim}" description')
         prompt = f'Can you provide a detailed description for the company "{victim}" in around 400 chars and without any links ? If you cannot just answer "N/A".'
         response = query_ai(prompt)

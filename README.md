@@ -135,27 +135,30 @@ When enabled, `scrape.py` will:
 
 ---
 
-### ⚠️ Known Unparseable Groups
+### ⚠️ Challenging Groups & Known Issues
 
-The following groups are currently difficult to scrape or parse automatically for the reasons listed below:
+The following groups require special handling or are currently difficult to scrape/parse automatically:
 
-- **JavaScript / Rendering Required:** `cry0`. Some SPA sites require full browser rendering before data is visible.
-- **Access Queue / DDoS Protection:** `shinyhunters`. These sites often use waiting rooms (Access Queue) that prevent automated scraping of the actual content.
+- **JavaScript / Rendering Required:** `cry0`, `termite`. These SPA sites require full browser rendering before data is visible.
+- **Access Queue / DDoS Protection:** `clop`. These sites often use waiting rooms or protection screens that prevent automated scraping.
 - **CAPTCHA Protected:** `kyber`, `payload`.
 - **Empty / Scrape Failure:** `0x thief`, `abrahams ax`. Usually occurs when the host itself is down.
 - **Access Denied:** `cloak` (403 Forbidden).
-- **Announcement Only / Empty Directory:** `kazu`, `blackshrantac`, `lockbit 4.0 control panel`.
-- **Seized by Law Enforcement:** `ragnar locker`, `vanir`, `radar` (FBI/EU seizures).
+- **Seized by Law Enforcement:** `ragnar locker`, `vanir`.
+
+*Note: Sites using math captchas like `thegentlemen` can now be automatically bypassed using AI (Gemini/OpenAI).*
+*Note: Groups using modern SPA templates such as `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, and `termite` are now supported thanks to recent parser updates.*
 
 ---
 
 ### ⚙️ AI Provider Configuration
 
-This project can use LLMs from OpenAI and Gemini to automatically enrich information about victims.
+This project can use LLMs from OpenAI and Gemini to automatically enrich information about victims, and automatically bypass certain captchas.
 
 -   `AI_PROVIDER`: Selects the AI provider to use. Set to `openai` or `gemini`. Defaults to `openai`.
--   `OPENAI_API_KEY`: Your API key if you are using OpenAI.
--   `GEMINI_API_KEY`: Your API key if you are using Gemini.
+-   `OPENAI_API_KEY` / `GEMINI_API_KEY`: Set your API key for the selected provider.
+-   `AI_CAPTCHA_SOLVING_ENABLED`: Set to `true` to use AI Vision to automatically solve image captchas like `thegentlemen` during scraping (default: `false`).
+-   `AI_ENRICHMENT_ENABLED`: Set to `true` to use AI to automatically infer sector, description, and country from captured data (default: `true`).
 
 ---
 

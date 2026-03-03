@@ -4,6 +4,7 @@ from datetime import datetime
 from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
 
 # -------------------- CONFIG --------------------
 script_dir = Path(__file__).resolve().parent
@@ -15,12 +16,14 @@ home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "kairos"
+    group_name = "the gentlemen"
+    # For matching filename which is usually normalized
+    file_prefix = "thegentlemen"
     stdlog(f"Processing group: {group_name}")
 
     for filename in os.listdir(tmp_dir):
         try:
-            if filename.startswith(group_name + '-'):
+            if filename.startswith(file_prefix + '-'):
                 html_doc = tmp_dir / filename
                 stdlog(f"Parsing: {html_doc}")
                 with open(html_doc, 'r', encoding='utf-8') as file:
@@ -30,53 +33,47 @@ def main():
                 base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) or ""
                 if base_url: base_url = base_url.rstrip('/')
 
-                # The HTML structure has victim items in cards
-                cards = soup.find_all('div', attrs={'data-slot': 'card'})
+                # Items are in cards
+                cards = soup.find_all('div', class_='card')
+                
                 for card in cards:
                     try:
-                        title_tag = card.find('h3')
+                        # Title
+                        title_tag = card.find('div', class_='card-title')
                         if not title_tag:
                             continue
-                        
                         title = title_tag.get_text(strip=True)
-                        if not title:
-                            continue
 
-                        # Extract description
+                        # Description
                         description = ""
-                        desc_tag = card.find('p', class_=re.compile(r'text-sm'))
+                        desc_tag = card.find('div', class_='card-desc')
                         if desc_tag:
                             description = desc_tag.get_text(strip=True)
 
-                        # Extract country and data size
-                        country = ""
-                        data_size = ""
-                        info_labels = card.find_all('span', class_='text-muted-foreground')
-                        for label in info_labels:
-                            text = label.get_text(strip=True)
-                            value_tag = label.find_next_sibling('span')
-                            if value_tag:
-                                value = value_tag.get_text(strip=True)
-                                if "Country" in text:
-                                    country = value
-                                elif "Data" in text:
-                                    data_size = value
-                        
-                        if data_size:
-                            description = f"[{data_size}] {description}"
+                        # Extract website from description
+                        website = ""
+                        if description:
+                            # Look for strings ending in .com, .net, etc. at the start
+                            match = re.search(r'^([a-z0-9.-]+\.[a-z]{2,})', description.lower())
+                            if match:
+                                website = match.group(1)
 
-                        # Extract "PUBLISHED" status
+                        # Status from buttons
                         published = ""
-                        status_tag = card.find('span', string=re.compile(r'PUBLISHED'))
-                        if status_tag:
-                            published = "Published"
+                        btn = card.find('button', class_='card-btn')
+                        if btn:
+                            status_text = btn.get_text(strip=True)
+                            if "Activates in" in status_text:
+                                published = status_text # Still counting down
+                            else:
+                                published = "Published"
 
                         # Link
                         link = base_url
 
-                        appender(title, group_name, description, '', published, link, country)
+                        appender(title, group_name, description, website, published, link)
                     except Exception as e:
-                        errlog(f"{group_name} - card parse fail: {e}")
+                        errlog(f"{group_name} - item parse fail: {e}")
         except Exception as e:
             errlog(f"{group_name} - file process fail: {e} in file: {filename}")
 

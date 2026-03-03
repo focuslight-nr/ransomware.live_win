@@ -16,7 +16,7 @@ home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "runsomewares"
+    group_name = "termite"
     stdlog(f"Processing group: {group_name}")
 
     for filename in os.listdir(tmp_dir):
@@ -31,34 +31,40 @@ def main():
                 base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) or ""
                 if base_url: base_url = base_url.rstrip('/')
 
-                # Items are in cards
-                cards = soup.find_all('div', class_='card')
+                # Items are <a> tags with min-h-36 class
+                items = soup.find_all('a', class_='min-h-36')
                 
-                for card in cards:
+                for item in items:
                     try:
-                        # Title
-                        title_tag = card.find('h5', class_='card-title')
-                        if not title_tag:
-                            continue
-                        title = title_tag.get_text(strip=True)
+                        # Website
+                        h2 = item.find('h2', class_='font-bold')
+                        website = h2.get_text(strip=True) if h2 else ""
+
+                        # Company name
+                        h3 = item.find('h3', class_='text-sm')
+                        title = h3.get_text(strip=True) if h3 else website
                         
-                        # Skip placeholder cards
                         if not title:
                             continue
 
-                        # Description
-                        description = ""
-                        desc_tag = card.find('p', class_='card-text')
-                        if desc_tag:
-                            description = desc_tag.get_text(strip=True)
-
                         # Link
-                        link = ""
-                        link_tag = card.find('a', class_='more-info-link')
-                        if link_tag:
-                            link = link_tag['href']
+                        link = urljoin(base_url, item['href']) if base_url else item['href']
 
-                        appender(title, group_name, description, '', '', link)
+                        # Date
+                        published = ""
+                        date_div = item.find('div', class_=re.compile(r'items-end'))
+                        if date_div:
+                            date_str = date_div.get_text(strip=True)
+                            try:
+                                # Format: 03/03/2026, 10:05:25
+                                dt = datetime.strptime(date_str, "%d/%m/%Y, %H:%M:%S")
+                                published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                            except:
+                                published = date_str
+
+                        description = f"Leaked data from {group_name} group."
+                        
+                        appender(title, group_name, description, website, published, link)
                     except Exception as e:
                         errlog(f"{group_name} - item parse fail: {e}")
         except Exception as e:

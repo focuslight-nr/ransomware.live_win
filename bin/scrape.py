@@ -35,6 +35,9 @@ from libcapture import capture_group
 # Any group name in this set will be scraped via simple Tor HTTP (requests)
 SPECIAL_HTML_FETCH_GROUPS = {"interlock"}  # extend as needed, e.g., {"interlock", "examplegroup"}
 
+# Groups that require extra time for JavaScript rendering (SPA)
+SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks"}
+
 # -------------------- ENV LOADING --------------------
 script_dir = Path(__file__).resolve().parent
 env_path = script_dir.parent / ".env"
@@ -56,6 +59,69 @@ if TOR_AUTO_MANAGE:
     stdlog(f"Tor Binary: {TOR_BINARY_PATH}")
 
 proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")  # Default to Tor proxy
+
+# -------------------- AI CAPTCHA SOLVER --------------------
+AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'models/gemini-2.5-flash')
+AI_CAPTCHA_SOLVING_ENABLED = os.getenv('AI_CAPTCHA_SOLVING_ENABLED', 'false').lower() == 'true'
+
+def solve_captcha_image(base64_image: str) -> str:
+    # Use OpenAI or Gemini vision models
+    provider = AI_PROVIDER.lower()
+    prompt = "Solve this math captcha. Provide ONLY the final numeric answer, no other text."
+    
+    if provider == 'gemini':
+        if not GEMINI_API_KEY:
+            return ""
+        try:
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            
+            image_bytes = base64.b64decode(base64_image)
+            
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                    prompt
+                ]
+            )
+            return response.text.strip()
+        except Exception as e:
+            errlog(f"Gemini API error during captcha: {e}")
+            return ""
+            
+    elif provider == 'openai':
+        if not OPENAI_API_KEY:
+            return ""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            errlog(f"OpenAI API error during captcha: {e}")
+            return ""
+    return ""
 
 # add this helper (e.g., above scrape_group)
 async def _run_capture_group(url: str):
@@ -383,26 +449,66 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     else:
                         # ---- DEFAULT: Playwright path ----
                         page = await context.new_page()
-                        # Increased timeout to 180s for Tor stability
+                        
+                        # Set group-specific timeouts and flags
+                        is_spa = group_name.lower() in {g.lower() for g in SPA_SCRAPE_GROUPS}
+                        goto_timeout = 180000 if is_spa else 90000
+                        
                         try:
-                            await page.goto(slug, wait_until="load", timeout=180000)
+                            await page.goto(slug, wait_until="load", timeout=goto_timeout)
                         except Exception as e:
                             stdlog(f"[{group_name}] goto timed out or failed, but trying to save what we have: {str(e).splitlines()[0]}")
 
-                        try:
-                            # Try to wait for network to be idle, but don't fail if it takes too long
-                            await page.wait_for_load_state("networkidle", timeout=10000)
-                        except:
-                            pass
-                        
-                        await page.mouse.move(x=500, y=400)
-                        await page.mouse.wheel(delta_y=2000, delta_x=0)
-                        # A bit more fixed wait for slow JS rendering
-                        if group_name.lower() == "worldleaks":
-                            stdlog(f"[{group_name}] Waiting 30s for Angular to render...")
+                        # Dynamic wait logic for SPA rendering
+                        if is_spa:
+                            stdlog(f"[{group_name}] SPA detected. Waiting for rendering (max 60s)...")
+                            # Scroll to trigger lazy loading
+                            await page.mouse.move(x=500, y=400)
+                            await page.mouse.wheel(delta_y=2000, delta_x=0)
+                            await asyncio.sleep(5)
+                            await page.mouse.wheel(delta_y=-2000, delta_x=0)
+                            
+                            # Fixed sleep for base rendering
                             await asyncio.sleep(30)
+                            
+                            # Wait until pulse animation disappears (common in modern React/Vite/Next.js)
+                            try:
+                                await page.wait_for_selector(".animate-pulse", state="detached", timeout=30000)
+                                stdlog(f"[{group_name}] Skeleton removed, content ready.")
+                            except:
+                                stdlog(f"[{group_name}] Finished waiting for SPA content.")
                         else:
-                            await asyncio.sleep(10)
+                            try:
+                                # Try to wait for network to be idle, but don't fail if it takes too long
+                                await page.wait_for_load_state("networkidle", timeout=10000)
+                            except:
+                                pass
+                            # Generic scroll for non-SPA too
+                            await page.mouse.move(x=500, y=400)
+                            await page.mouse.wheel(delta_y=2000, delta_x=0)
+                            await asyncio.sleep(5)
+                            
+                        # Handle specific captchas
+                        if AI_CAPTCHA_SOLVING_ENABLED and group_name.lower().replace(" ", "") == "thegentlemen":
+                            try:
+                                captcha_img = await page.query_selector('img#math-captcha-image')
+                                if captcha_img:
+                                    src = await captcha_img.get_attribute('src')
+                                    if src and "base64," in src:
+                                        base64_data = src.split("base64,")[1]
+                                        stdlog(f"[{group_name}] Solving math captcha via AI...")
+                                        answer = await asyncio.to_thread(solve_captcha_image, base64_data)
+                                        if answer:
+                                            # clean the answer just in case
+                                            answer = ''.join(filter(str.isdigit, answer))
+                                            if answer:
+                                                stdlog(f"[{group_name}] AI answered: {answer}")
+                                                await page.fill('input#math-captcha-answer', answer)
+                                                await page.click('button#math-captcha-submit')
+                                                stdlog(f"[{group_name}] Waiting for captcha validation and data load...")
+                                                await asyncio.sleep(10) # wait for data to load
+                            except Exception as ce:
+                                errlog(f"[{group_name}] Error during captcha solving: {ce}")
                         
                         content = await page.content()
                         title = await page.title()

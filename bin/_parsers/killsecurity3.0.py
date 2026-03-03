@@ -15,7 +15,7 @@ home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "kairos"
+    group_name = "killsecurity3.0"
     stdlog(f"Processing group: {group_name}")
 
     for filename in os.listdir(tmp_dir):
@@ -30,53 +30,50 @@ def main():
                 base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) or ""
                 if base_url: base_url = base_url.rstrip('/')
 
-                # The HTML structure has victim items in cards
-                cards = soup.find_all('div', attrs={'data-slot': 'card'})
-                for card in cards:
+                # The HTML structure has victim items in rounded bordered divs
+                # We can look for divs that contain both a company name and a domain
+                items = soup.find_all('div', class_=re.compile(r'flex flex-col.*rounded-\[10px\]'))
+                
+                for item in items:
                     try:
-                        title_tag = card.find('h3')
-                        if not title_tag:
+                        # Extract company name
+                        name_tag = item.find('span', class_=re.compile(r'text-white/75.*text-xl'))
+                        if not name_tag:
                             continue
-                        
-                        title = title_tag.get_text(strip=True)
-                        if not title:
-                            continue
+                        title = name_tag.get_text(strip=True)
+
+                        # Extract website
+                        website = ""
+                        website_tag = item.find('span', class_=re.compile(r'text-white/40.*text-\[10px\]'))
+                        if website_tag:
+                            website = website_tag.get_text(strip=True)
 
                         # Extract description
                         description = ""
-                        desc_tag = card.find('p', class_=re.compile(r'text-sm'))
+                        desc_tag = item.find('div', class_=re.compile(r'flex-1.*text-xs'))
                         if desc_tag:
                             description = desc_tag.get_text(strip=True)
+                            if description == "No description given.":
+                                description = ""
 
-                        # Extract country and data size
+                        # Extract country from flag alt attribute
                         country = ""
-                        data_size = ""
-                        info_labels = card.find_all('span', class_='text-muted-foreground')
-                        for label in info_labels:
-                            text = label.get_text(strip=True)
-                            value_tag = label.find_next_sibling('span')
-                            if value_tag:
-                                value = value_tag.get_text(strip=True)
-                                if "Country" in text:
-                                    country = value
-                                elif "Data" in text:
-                                    data_size = value
-                        
-                        if data_size:
-                            description = f"[{data_size}] {description}"
+                        flag_img = item.find('img', alt=re.compile(r'flag'))
+                        if flag_img:
+                            country = flag_img['alt'].replace(' flag', '').upper()
 
-                        # Extract "PUBLISHED" status
+                        # Extract status
                         published = ""
-                        status_tag = card.find('span', string=re.compile(r'PUBLISHED'))
+                        status_tag = item.find('div', class_=re.compile(r'text-right.*text-\[11px\]'))
                         if status_tag:
-                            published = "Published"
+                            published = status_tag.get_text(strip=True)
 
                         # Link
                         link = base_url
 
-                        appender(title, group_name, description, '', published, link, country)
+                        appender(title, group_name, description, website, published, link, country)
                     except Exception as e:
-                        errlog(f"{group_name} - card parse fail: {e}")
+                        errlog(f"{group_name} - item parse fail: {e}")
         except Exception as e:
             errlog(f"{group_name} - file process fail: {e} in file: {filename}")
 

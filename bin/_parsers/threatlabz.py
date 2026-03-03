@@ -16,7 +16,7 @@ home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 def main():
-    group_name = "runsomewares"
+    group_name = "threatlabz"
     stdlog(f"Processing group: {group_name}")
 
     for filename in os.listdir(tmp_dir):
@@ -31,34 +31,44 @@ def main():
                 base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) or ""
                 if base_url: base_url = base_url.rstrip('/')
 
-                # Items are in cards
-                cards = soup.find_all('div', class_='card')
+                # Items are in a tags with MuiLink-root class
+                items = soup.find_all('a', class_=re.compile(r'MuiLink-root'))
                 
-                for card in cards:
+                for item in items:
                     try:
-                        # Title
-                        title_tag = card.find('h5', class_='card-title')
-                        if not title_tag:
+                        boxes = item.find_all('div', class_='MuiBox-root', recursive=False)
+                        if len(boxes) < 2:
                             continue
-                        title = title_tag.get_text(strip=True)
                         
-                        # Skip placeholder cards
-                        if not title:
+                        # Name
+                        name_tag = boxes[0].find('p')
+                        if not name_tag:
                             continue
+                        title = name_tag.get_text(strip=True)
 
-                        # Description
-                        description = ""
-                        desc_tag = card.find('p', class_='card-text')
-                        if desc_tag:
-                            description = desc_tag.get_text(strip=True)
+                        # Dates
+                        published = ""
+                        update_info = ""
+                        date_ps = boxes[1].find_all('p')
+                        for p in date_ps:
+                            text = p.get_text(strip=True)
+                            if 'CREATE:' in text:
+                                date_str = text.replace('CREATE:', '').strip()
+                                try:
+                                    # Format: 2026.01.28
+                                    dt = datetime.strptime(date_str, "%Y.%m.%d")
+                                    published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                                except:
+                                    published = date_str
+                            elif 'UPDATE:' in text:
+                                update_info = text
 
+                        description = update_info
+                        
                         # Link
-                        link = ""
-                        link_tag = card.find('a', class_='more-info-link')
-                        if link_tag:
-                            link = link_tag['href']
+                        link = urljoin(base_url, item['href']) if base_url else item['href']
 
-                        appender(title, group_name, description, '', '', link)
+                        appender(title, group_name, description, '', published, link)
                     except Exception as e:
                         errlog(f"{group_name} - item parse fail: {e}")
         except Exception as e:

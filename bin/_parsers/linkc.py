@@ -3,10 +3,10 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os,datetime,sys
+import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
+from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
 

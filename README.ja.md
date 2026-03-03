@@ -136,24 +136,28 @@ TOR_TORRC_PATH=C:\Path\To\torrc # オプション
 
 ---
 
-### ⚠️ 解析不能な既知のグループ
+### ⚠️ 解析困難・対策が必要なグループ
 
-以下のグループは、現在の自動スクレイピングや静的解析では取得が困難です：
+以下のグループは、現在の自動スクレイピング設定や静的解析では取得に特別な工夫が必要です：
 
-- **JavaScript / レンダリング待ち:** `cry0`。一部の SPA サイトは、ブラウザでの完全なレンダリング完了までデータが表示されません。
-- **待ち行列 / DDoS 保護:** `shinyhunters`。これらのサイトは、自動スクレイピングを妨げる待ち行列システムや保護画面（Access Queue）を備えていることが多いです。
-- **CAPTCHA 保護:** `kyber`, `payload`。
-- **中身が空 / スクレイピング失敗:** `0x thief`, `abrahams ax`。ホスト自体がダウンしている場合に発生します。
+- **JavaScript / レンダリング待ち:** `cry0`, `termite`。これらの SPA サイトは、ブラウザでの完全なレンダリング完了までデータが表示されません。
+- **DDoS 保護 / CAPTCHA:** `clop`。自動スクレイピングを妨げる強力な保護画面を備えています。
+- **待ち行列システム:** `shinyhunters`。アクセス待ち（Access Queue）画面で止まることがあります。
+- **中身が空 / オフライン:** `0x thief`, `abrahams ax` など。サイト自体がダウンしている場合に発生します。
+
+*※ `thegentlemen` などの数学キャプチャ採用サイトは、AI（Gemini/OpenAI）による自動突破が可能になりました。*
+*※ `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, `termite` などの SPA/モダンテンプレート採用サイトについては、最新のアップデートにより自動解析・レンダリング待ちが可能になりました。*
 
 ---
 
 ### ⚙️ AIプロバイダーの設定
 
-このプロジェクトは、OpenAIとGeminiのLLMを使用して、被害者に関する情報を自動的に補完できます。
+このプロジェクトは、OpenAIとGeminiのLLMを使用して、キャプチャの自動突破や被害者情報の自動補完が可能です。
 
--   `AI_PROVIDER`: 使用するAIプロバイダーを選択します。`openai` または `gemini` を設定してください。デフォルトは `openai` です。
--   `OPENAI_API_KEY`: OpenAI APIを使用する場合に、あなたのAPIキーを設定します。
--   `GEMINI_API_KEY`: Gemini APIを使用する場合に、あなたのAPIキーを設定します。
+-   `AI_PROVIDER`: 使用するAIプロバイダーを選択します。`openai` または `gemini` を設定してください。
+-   `OPENAI_API_KEY` / `GEMINI_API_KEY`: 使用するプロバイダーのAPIキーを設定します。
+-   `AI_CAPTCHA_SOLVING_ENABLED`: `true` に設定すると、スクレイピング時に AI Vision を使用して `thegentlemen` などの画像キャプチャを自動的に突破します（デフォルト: `false`）。
+-   `AI_ENRICHMENT_ENABLED`: `true` に設定すると、取得したデータから AI が国、業種、説明文を自動的に推測・補完します（デフォルト: `true`）。
 
 ---
 
