@@ -142,7 +142,7 @@ When enabled, `scrape.py` will:
 
 The following groups require special handling or are currently difficult to scrape/parse automatically:
 
-- **JavaScript / Rendering Required:** `cry0`, `termite`. These SPA sites require full browser rendering before data is visible.
+- **JavaScript / Rendering Required:** `cry0`. These SPA sites require full browser rendering before data is visible.
 - **Access Queue / DDoS Protection:** `clop`. These sites often use waiting rooms or protection screens that prevent automated scraping.
 - **CAPTCHA Protected:** `kyber`, `payload`.
 - **Empty / Scrape Failure:** `0x thief`, `abrahams ax`. Usually occurs when the host itself is down.
