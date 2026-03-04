@@ -106,10 +106,13 @@ playwright install firefox
     *   `PUSHOVER_ENABLED`: `true` または `false` を設定し、モバイルデバイスへのリアルタイムプッシュ通知を有効または無効にします。
     *   `PUSH_USER`, `PUSH_API`: Pushover の User Key と Application API Token です。
     *   `NTFY_ENABLED`: `true` または `false` を設定し、ntfy経由での通知送信を有効または無効にします。
+    *   `PLAYWRIGHT_BROWSER`: Playwright で使用するブラウザの種類を設定します (`firefox`, `chromium`, `webkit`)。デフォルトは `firefox` です。
     *   `SCRAPE_CONCURRENCY`: 同時に実行するスクレイピングタスクの数（例: `1` や `3`）。デフォルトは `1` です。数値を大きくすると高速化しますが、Tor ネットワークの安定性に影響する場合があります。
     *   `TOR_AUTO_MANAGE`: `true` に設定すると、スクレイピング実行時のみ Tor プロセスを自動的に起動・終了します。
     *   `TOR_BINARY_PATH`: Tor 実行ファイルへのパス（例: `C:\Path\To\tor.exe`）。
     *   `TOR_TORRC_PATH`: (オプション) 特定の `torrc` 設定ファイルへのパス。
+    *   `AUTO_SCREENSHOT_VICTIMS`: `true` に設定すると、新しい被害者が追加された際に自動でスクリーンショットを撮影します。
+    *   `AUTO_SCREENSHOT_GROUPS`: `true` に設定すると、スクレイピング時にグループサイトのスクリーンショットを自動で撮影します。
     *   `USE_WATERMARK`: `true` または `false` を設定し、スクリーンショットへの透かし（ウォーターマーク）追加を有効または無効にします。
     *   `WATERMARK_IMAGE_PATH`: 透かし画像のパス（例: `/images/my-logo.png`）。
     *   その他の変数は、通知（Pushover, BlueSky, NTFY）、OpenAI, メール設定用です。

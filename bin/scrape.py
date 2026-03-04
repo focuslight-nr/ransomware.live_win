@@ -53,6 +53,8 @@ TOR_AUTO_MANAGE = os.getenv("TOR_AUTO_MANAGE", "false").strip().lower() == "true
 TOR_BINARY_PATH = os.getenv("TOR_BINARY_PATH", "tor")
 TOR_TORRC_PATH = os.getenv("TOR_TORRC_PATH")
 SCRAPE_CONCURRENCY = int(os.getenv("SCRAPE_CONCURRENCY", "1"))
+PLAYWRIGHT_BROWSER = os.getenv('PLAYWRIGHT_BROWSER', 'firefox').lower()
+AUTO_SCREENSHOT_GROUPS = os.getenv('AUTO_SCREENSHOT_GROUPS', 'false').lower() == 'true'
 
 stdlog(f"Tor Auto-Manage: {TOR_AUTO_MANAGE}")
 if TOR_AUTO_MANAGE:
@@ -143,7 +145,7 @@ async def download_favicon(page, save_path):
         favicon_url = await page.evaluate(
             "() => { return document.querySelector('link[rel~=\"icon\"]')?.href; }"
         )
-        if not favicon_url:
+        if not favicon_url or favicon_url.startswith(("chrome:", "about:", "resource:")):
             return False
 
         if favicon_url.startswith("data:"):
@@ -533,7 +535,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     hash_slug = hashlib.md5(slug.encode()).hexdigest()
                     group_slug = safe_slug(group_name)
                     image_path = f"{img_dir}/groups/{group_slug}-{hash_slug}.png"
-                    if not Path(image_path).exists() or is_file_older_than(image_path, 10080):
+                    if AUTO_SCREENSHOT_GROUPS and (not Path(image_path).exists() or is_file_older_than(image_path, 10080)):
                         # If you still want a screenshot from browser for non-special groups, keep page logic above.
                         # For both paths we’ll delegate to your capture lib which handles its own logic.
                         try:
@@ -594,8 +596,16 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
 async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
     async with async_playwright() as p:
+        # Browser selection from environment
+        if PLAYWRIGHT_BROWSER == "chromium":
+            browser_type = p.chromium
+        elif PLAYWRIGHT_BROWSER == "webkit":
+            browser_type = p.webkit
+        else:
+            browser_type = p.firefox
+
         # Firefox sometimes handles Tor/SOCKS5 better than Chromium on Windows
-        browser = await p.firefox.launch(
+        browser = await browser_type.launch(
             headless=True,
             proxy={"server": proxy_address}
         )

@@ -48,8 +48,20 @@ from libcapture import capture_victim
 home = Path(__file__).resolve().parent.parent
 env_path = home / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
+
+# Export home path as RANSOMWARELIVE_HOME if not set in env
+if not os.getenv("RANSOMWARELIVE_HOME"):
+    os.environ["RANSOMWARELIVE_HOME"] = str(home)
+
+# Ensure TMP_DIR and DB_DIR are in env for parsers
+if not os.getenv("TMP_DIR"):
+    os.environ["TMP_DIR"] = "tmp"
+if not os.getenv("DB_DIR"):
+    os.environ["DB_DIR"] = "db"
+
 # Paths from environment variables
 db_dir = home.joinpath(os.getenv("DB_DIR").strip('/'))
+tmp_dir = home.joinpath(os.getenv("TMP_DIR").strip('/'))
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # Gemini
@@ -62,9 +74,10 @@ HUDSONROCK_ENABLED = os.getenv('HUDSONROCK_ENABLED', 'true').lower() == 'true'
 BLUESKY_ENABLED = os.getenv('BLUESKY_ENABLED', 'true').lower() == 'true'
 NTFY_ENABLED = os.getenv('NTFY_ENABLED', 'true').lower() == 'true'
 PUSHOVER_ENABLED = os.getenv('PUSHOVER_ENABLED', 'true').lower() == 'true'
-AUTO_SCREENSHOT = os.getenv('AUTO_SCREENSHOT', 'false').lower() == 'true'
+AUTO_SCREENSHOT_VICTIMS = os.getenv('AUTO_SCREENSHOT_VICTIMS', 'false').lower() == 'true'
 USE_WATERMARK = os.getenv('USE_WATERMARK', 'true').lower() == 'true'
 LOCAL_DUPLICATES = os.getenv('LOCAL_DUPLICATES', 'false').lower() == 'true'
+PLAYWRIGHT_BROWSER = os.getenv('PLAYWRIGHT_BROWSER', 'firefox').lower()
 WATERMARK_IMAGE_PATH = home / os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")
 proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")  # Default to Tor proxy
 
@@ -232,7 +245,15 @@ async def take_screenshot_victim(url):
 
     async with async_playwright() as p:
         try:
-            browser = await p.firefox.launch(proxy={"server": TOR_PROXY}, headless=True)
+            # Use configurable browser
+            if PLAYWRIGHT_BROWSER == "chromium":
+                browser_type = p.chromium
+            elif PLAYWRIGHT_BROWSER == "webkit":
+                browser_type = p.webkit
+            else:
+                browser_type = p.firefox
+                
+            browser = await browser_type.launch(proxy={"server": TOR_PROXY}, headless=True)
             context = await browser.new_context(proxy={"server": TOR_PROXY}, ignore_https_errors=True)
             page = await context.new_page()
 
@@ -535,7 +556,15 @@ async def victim_screenshot(post_url, group_name, victim):
     watermark_path = Path(os.path.join(home, os.getenv("WATERMARK_IMAGE_PATH", "images/ransomwarelive.png").lstrip("/")))
 
     async with async_playwright() as playwright:
-        browser = await playwright.firefox.launch(
+        # Use configurable browser
+        if PLAYWRIGHT_BROWSER == "chromium":
+            browser_type = playwright.chromium
+        elif PLAYWRIGHT_BROWSER == "webkit":
+            browser_type = playwright.webkit
+        else:
+            browser_type = playwright.firefox
+
+        browser = await browser_type.launch(
             proxy={"server": proxy},
             headless=True
         )
@@ -781,7 +810,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
             published = str(datetime.today())
     else:
         published = str(datetime.today())
-    if post_url and AUTO_SCREENSHOT:
+    if post_url and AUTO_SCREENSHOT_VICTIMS:
         #asyncio.run(victim_screenshot(post_url, group_name, victim))
         #asyncio.run(take_screenshot_victim(post_url))
         capture_victim(post_url)
@@ -795,7 +824,7 @@ def appender(victim,group_name,description='',website='', published='', post_url
     ]
 
     activity = "Not Found"
-    if AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY):
+    if AI_ENRICHMENT_ENABLED and AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY):
         stdlog(f"Querying AI for '{victim}' activity...")
         prompt = (
             f'Using this list: {", ".join(SECTOR_LIST)}, '

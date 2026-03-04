@@ -11,15 +11,8 @@
 import os,datetime,sys
 from bs4 import BeautifulSoup
 from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, tmp_dir
 from pathlib import Path
-from dotenv import load_dotenv
-
-env_path = Path("../.env")
-load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
-
 
 def main():
     for filename in os.listdir(tmp_dir):

@@ -11,18 +11,11 @@
 import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog, tmp_dir
 from urllib.parse import urljoin
 from pathlib import Path
-from dotenv import load_dotenv
-
-env_path = Path("../.env")
-load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
 
 def main():
-
     # Define the date format to convert to
     date_format = "%Y-%m-%d %H:%M:%S.%f"
     

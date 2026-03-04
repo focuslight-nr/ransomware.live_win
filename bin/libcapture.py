@@ -32,6 +32,7 @@ networkidle_gang = ['incransom']
 GROUPS_JSON_PATH = os.path.join(os.path.dirname(__file__), "../db/groups.json")
 HAAR_CASCADE_PATH = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 USE_WATERMARK = os.getenv('USE_WATERMARK', 'true').lower() == 'true'
+PLAYWRIGHT_BROWSER = os.getenv('PLAYWRIGHT_BROWSER', 'firefox').lower()
 # -------------------------
 
 # Default OUTPUT_DIR for victims (keeps capture_victim behavior unchanged)
@@ -117,7 +118,15 @@ async def screenshot_onion(url: str) -> str:
     final_path = os.path.join(OUTPUT_DIR, f"{md5_base}.png")
 
     async with async_playwright() as p:
-        browser = await p.firefox.launch(
+        # Browser selection from environment
+        if PLAYWRIGHT_BROWSER == "chromium":
+            browser_type = p.chromium
+        elif PLAYWRIGHT_BROWSER == "webkit":
+            browser_type = p.webkit
+        else:
+            browser_type = p.firefox
+
+        browser = await browser_type.launch(
             headless=True,
             proxy={"server": TOR_PROXY}
         )
@@ -200,7 +209,15 @@ async def screenshot_onion_with_path(url: str, final_path: str) -> str:
     simplewait = decide_simplewait(url)
 
     async with async_playwright() as p:
-        browser = await p.firefox.launch(
+        # Browser selection from environment
+        if PLAYWRIGHT_BROWSER == "chromium":
+            browser_type = p.chromium
+        elif PLAYWRIGHT_BROWSER == "webkit":
+            browser_type = p.webkit
+        else:
+            browser_type = p.firefox
+
+        browser = await browser_type.launch(
             headless=True,
             proxy={"server": TOR_PROXY}
         )

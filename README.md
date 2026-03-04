@@ -105,10 +105,13 @@ This project uses a `.env` file to manage all configuration settings.
     *   `PUSHOVER_ENABLED`: Set to `true` or `false` to enable or disable real-time push notifications to your mobile device.
     *   `PUSH_USER`, `PUSH_API`: Your Pushover User Key and Application API Token.
     *   `NTFY_ENABLED`: Set to `true` or `false` to enable or disable sending notifications via ntfy.
+    *   `PLAYWRIGHT_BROWSER`: Set the browser type for Playwright (`firefox`, `chromium`, or `webkit`). Defaults to `firefox`.
     *   `SCRAPE_CONCURRENCY`: Number of simultaneous scraping tasks (e.g., `1` or `3`). Default is `1`. Set higher to speed up but be careful with Tor network stability.
     *   `TOR_AUTO_MANAGE`: Set to `true` to automatically start and stop the Tor process during scraping.
     *   `TOR_BINARY_PATH`: Path to your Tor executable (e.g., `C:\Path\To\tor.exe`).
     *   `TOR_TORRC_PATH`: (Optional) Path to a specific `torrc` configuration file.
+    *   `AUTO_SCREENSHOT_VICTIMS`: Set to `true` to automatically capture screenshots of victims when they are added.
+    *   `AUTO_SCREENSHOT_GROUPS`: Set to `true` to automatically capture screenshots of groups during scraping.
     *   `USE_WATERMARK`: Set to `true` or `false` to enable or disable adding a watermark to screenshots.
     *   `WATERMARK_IMAGE_PATH`: Path to the watermark image (e.g., `/images/my-logo.png`).
     *   Other variables are for notifications (Pushover, BlueSky, NTFY), OpenAI, and mail settings.
