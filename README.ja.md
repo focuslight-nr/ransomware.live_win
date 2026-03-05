@@ -32,7 +32,7 @@ ransomware.live_win/
 |   ├── _parsers/         # 各サイト用のパーサー
 │   ├── libcapture.py     # 被害者/グループのスクリーンショットをキャプチャ
 │   ├── mass_capture.py   # 全被害者のスクリーンショットを一括キャプチャ
-│   ├── export_to_excel.py # victims.json を Excel 形式にエクスポート
+│   ├── export_to_excel.py # 被害者およびグループのデータを Excel 形式にエクスポート
 │   ├── hudsonrockapi.py  # Hudson Rock APIとの連携（Telegramボット経由）
 │   ├── parse.py          # 収集したデータを構造化フォーマットに解析
 │   ├── scrape.py         # メインのスクレイピングエンジン
@@ -247,12 +247,13 @@ python bin/victims-browser.py
 
 ### Excelへのデータエクスポート (`export_to_excel.py`)
 
-`victims.json` データベース全体を Excel ファイル (`victims.xlsx`) にエクスポートし、分析や報告を容易にします。
+収集したJSONデータをExcel形式にエクスポートし、分析や報告を容易にします。
 
-**機能:**
-- JSON データをクリーンな表形式に変換します。
-- リスト形式のデータ（重複情報など）をセル内の JSON 文字列として自動的に処理します。
-- 重要な情報（タイトル、グループ、日付、国など）が優先されるように列を並べ替えます。
+**主な機能:**
+- JSONデータをクリーンな表形式に変換します。
+- リスト形式のデータ（重複情報など）をセル内のJSON文字列として自動的に処理します。
+- **グループ情報の出力:** ネストされた `locations` リストを展開し、各サイト/ミラーを個別の行として出力します。
+- 重要な情報が優先されるように列を自動的に並べ替えます。
 
 **使用方法:**
 1. 依存ライブラリがインストールされていることを確認します：
@@ -260,10 +261,18 @@ python bin/victims-browser.py
    pip install pandas openpyxl
    ```
 2. スクリプトを実行します：
-   ```shell
-   python bin/export_to_excel.py
-   ```
-   プロジェクトのルートディレクトリに `victims.xlsx` が生成されます。
+   - **被害者とグループの両方を出力:**
+     ```shell
+     python bin/export_to_excel.py
+     ```
+   - **被害者情報のみ出力 (`victims.xlsx`):**
+     ```shell
+     python bin/export_to_excel.py --victims
+     ```
+   - **グループ情報のみ出力 (`groups.xlsx`):**
+     ```shell
+     python bin/export_to_excel.py --groups
+     ```
 
 ### スクリーンショットの一括キャプチャ (`mass_capture.py`)
 

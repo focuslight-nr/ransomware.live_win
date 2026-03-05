@@ -32,7 +32,7 @@ ransomware.live_win/
 |   ├── _parsers/         # All parsers
 │   ├── libcapture.py     # Capture victim/group screenshots
 │   ├── mass_capture.py   # Bulk screenshot capture for all victims
-│   ├── export_to_excel.py # Export victims.json to Excel format
+│   ├── export_to_excel.py # Export victims/groups data to Excel format
 │   ├── hudsonrockapi.py  # Hudson Rock API integration via Telegram bot
 │   ├── parse.py          # Parse collected data into structured formats
 │   ├── scrape.py         # Main scraping engine
@@ -248,12 +248,13 @@ python bin/victims-browser.py
 
 ### Exporting Data to Excel (`export_to_excel.py`)
 
-This script exports the entire `victims.json` database into an Excel file (`victims.xlsx`) for easier analysis and reporting.
+This script exports the collected data from JSON files into Excel format for easier analysis and reporting.
 
 **Features:**
 - Converts JSON data into a clean, tabular format.
 - Automatically handles list-type data (like duplicates) by converting them to JSON strings within cells.
-- Reorders columns to prioritize key information (Title, Group, Dates, Country, etc.).
+- **Groups Export:** Flattens the nested `locations` list so each site/mirror is a separate row.
+- Reorders columns to prioritize key information.
 
 **Usage:**
 1. Ensure dependencies are installed:
@@ -261,10 +262,18 @@ This script exports the entire `victims.json` database into an Excel file (`vict
    pip install pandas openpyxl
    ```
 2. Run the script:
-   ```shell
-   python bin/export_to_excel.py
-   ```
-   The file `victims.xlsx` will be generated in the project root.
+   - **Export both Victims and Groups:**
+     ```shell
+     python bin/export_to_excel.py
+     ```
+   - **Export only Victims (`victims.xlsx`):**
+     ```shell
+     python bin/export_to_excel.py --victims
+     ```
+   - **Export only Groups (`groups.xlsx`):**
+     ```shell
+     python bin/export_to_excel.py --groups
+     ```
 
 ### Bulk Screenshot Capture (`mass_capture.py`)
 
