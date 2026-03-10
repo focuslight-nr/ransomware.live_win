@@ -70,8 +70,12 @@ def siteschema(location):
     '''
     # Validate if location is a valid URL
     if not validators.url(location):
-        stdlog(f"Warning: Invalid URL format detected for '{location}'. Assuming it's an FQDN.")
-        location = 'http://' + location  # Fallback for non-URL inputs
+        # Only prepend http:// if no scheme is present
+        if not (location.startswith('http://') or location.startswith('https://')):
+            stdlog(f"Warning: Invalid URL format detected for '{location}'. Prepending http://")
+            location = 'http://' + location
+        else:
+            stdlog(f"Warning: URL format failed validation but scheme is present for '{location}'. Keeping as is.")
 
     schema = {
         'fqdn': getapex(location),

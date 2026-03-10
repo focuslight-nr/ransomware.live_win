@@ -30,8 +30,8 @@ for line in lines:
     
     status = parts[2].strip().upper()
     
-    # Support both .onion and clear web URLs
-    url_match = re.search(r'(https?://[a-zA-Z0-9.-]+(?:\.onion|[a-zA-Z]{2,}))', line)
+    # Support both .onion and clear web URLs - require a dot before the TLD/onion suffix
+    url_match = re.search(r'(https?://[a-zA-Z0-9.-]+\.(?:onion|[a-zA-Z]{2,}))', line)
     if not url_match:
         continue
     

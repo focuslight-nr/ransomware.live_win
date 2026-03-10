@@ -36,7 +36,7 @@ from libcapture import capture_group
 SPECIAL_HTML_FETCH_GROUPS = {"interlock"}  # extend as needed, e.g., {"interlock", "examplegroup"}
 
 # Groups that require extra time for JavaScript rendering (SPA)
-SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks"}
+SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks", "lockbit 5.0", "shinyhunters", "lapsus$group"}
 
 # -------------------- ENV LOADING --------------------
 script_dir = Path(__file__).resolve().parent
@@ -479,6 +479,84 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                 stdlog(f"[{group_name}] Skeleton removed, content ready.")
                             except:
                                 stdlog(f"[{group_name}] Finished waiting for SPA content.")
+
+                            # Special handling for LockBit 5.0 queue
+                            if group_name.lower() == "lockbit 5.0":
+                                try:
+                                    # Special handling for LockBit 5.0 entry button
+                                    try:
+                                        # Search for "Click Anywhere to enter" link
+                                        # Using a broad selector to catch the <a> tag
+                                        entry_button = await page.wait_for_selector("a.btn", timeout=10000)
+                                        if entry_button:
+                                            stdlog(f"[{group_name}] Entry button detected. Clicking...")
+                                            await entry_button.click()
+                                            # Wait for a significant change or navigation
+                                            await asyncio.sleep(10) 
+                                            await page.wait_for_load_state("networkidle", timeout=30000)
+                                    except Exception as ee:
+                                        stdlog(f"[{group_name}] Entry button not found or click failed: {str(ee).splitlines()[0]}")
+
+                                    # The queue page has "Your estimated wait time is <span class=\"eta\">"
+                                    # We wait for the victim list container to appear (e.g. .post-block)
+                                    # or for the queue message to disappear.
+                                    stdlog(f"[{group_name}] Queue/Loading detected. Waiting for redirect (max 5 minutes)...")
+                                    await page.wait_for_selector(".post-block", state="visible", timeout=300000)
+                                    stdlog(f"[{group_name}] Redirect successful, victim page loaded.")
+                                except Exception as qe:
+                                    stdlog(f"[{group_name}] Queue wait timed out or failed: {str(qe).splitlines()[0]}")
+                            
+                            # Special handling for shinyhunters entry gate
+                            if group_name.lower() == "shinyhunters":
+                                try:
+                                    gate = await page.wait_for_selector("div#gate", timeout=10000)
+                                    if gate:
+                                        stdlog(f"[{group_name}] Entry gate detected. Clicking...")
+                                        await gate.click()
+                                        await asyncio.sleep(5)
+                                        
+                                        # Now it might be in a queue
+                                        stdlog(f"[{group_name}] Waiting for content after gate (max 5 minutes)...")
+                                        # We need a selector for the actual content. 
+                                        # Since I don't have it, I'll wait for the queue to potentially finish or just wait a bit.
+                                        # Usually these sites have a specific container for victims.
+                                        # For now, let's wait for network idle or a long timeout.
+                                        try:
+                                            await page.wait_for_load_state("networkidle", timeout=60000)
+                                        except:
+                                            pass
+                                except Exception as ge:
+                                    stdlog(f"[{group_name}] Gate not found or click failed: {str(ge).splitlines()[0]}")
+
+                            # Special handling for lapsus$ group (Cloudflare bypass wait)
+                            if "lapsus" in group_name.lower():
+                                stdlog(f"[{group_name}] Cloudflare challenge detected or suspected. Attempting iframe bypass...")
+                                try:
+                                    # 1. Wait for Cloudflare iframe to appear
+                                    cf_frame_locator = page.frame_locator("iframe[src*='cloudflare']").first
+                                    # 2. Look for the checkbox element inside the iframe
+                                    # Selector #challenge-stage or input[type="checkbox"]
+                                    checkbox = cf_frame_locator.locator("#challenge-stage, input[type='checkbox']")
+                                    
+                                    if await checkbox.count() > 0:
+                                        stdlog(f"[{group_name}] Cloudflare Turnstile checkbox found. Clicking...")
+                                        await asyncio.sleep(random.uniform(2, 5)) # Human-like delay
+                                        await checkbox.click(timeout=15000)
+                                        stdlog(f"[{group_name}] Checkbox clicked. Waiting for redirect...")
+                                        await asyncio.sleep(15)
+                                    else:
+                                        stdlog(f"[{group_name}] No Turnstile checkbox found in iframe. Waiting for auto-redirect...")
+                                        await asyncio.sleep(20)
+                                except Exception as e:
+                                    stdlog(f"[{group_name}] Cloudflare bypass attempt failed or timed out: {str(e).splitlines()[0]}")
+                                    await asyncio.sleep(10)
+
+                                try:
+                                    # Wait for common content indicators to appear after challenge
+                                    await page.wait_for_load_state("networkidle", timeout=30000)
+                                    stdlog(f"[{group_name}] Network idle reached after challenge.")
+                                except:
+                                    pass
                         else:
                             try:
                                 # Try to wait for network to be idle, but don't fail if it takes too long
