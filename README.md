@@ -142,15 +142,15 @@ When enabled, `scrape.py` will:
 
 The following groups require special handling or are currently difficult to scrape/parse automatically:
 
+- **Cloudflare / Anti-Bot Protection:** `lapsus$ group`. These sites use strong protection that often blocks automated Tor traffic.
 - **JavaScript / Rendering Required:** `cry0`. These SPA sites require full browser rendering before data is visible.
-- **Access Queue / DDoS Protection:** `clop`. These sites often use waiting rooms or protection screens that prevent automated scraping.
-- **CAPTCHA Protected:** `kyber`, `payload`.
+- **DDoS Protection / Waiting Rooms:** `clop`. These sites often use protection screens that prevent automated scraping.
 - **Empty / Scrape Failure:** `0x thief`, `abrahams ax`. Usually occurs when the host itself is down.
 - **Access Denied:** `cloak` (403 Forbidden).
 - **Seized by Law Enforcement:** `ragnar locker`, `vanir`.
 
 *Note: Sites using math captchas like `thegentlemen` can now be automatically bypassed using AI (Gemini/OpenAI).*
-*Note: Groups using modern SPA templates such as `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, and `termite` are now supported thanks to recent parser updates.*
+*Note: Groups using modern SPA templates such as `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, `termite`, `lockbit 3.0`, and `shinyhunters` are now supported thanks to recent parser updates.*
 
 ---
 

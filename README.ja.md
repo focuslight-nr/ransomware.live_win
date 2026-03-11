@@ -143,13 +143,15 @@ TOR_TORRC_PATH=C:\Path\To\torrc # オプション
 
 以下のグループは、現在の自動スクレイピング設定や静的解析では取得に特別な工夫が必要です：
 
+- **Cloudflare / アンチボット保護:** `lapsus$ group`。自動化された Tor トラフィックを遮断する強力な保護を備えています。
 - **JavaScript / レンダリング待ち:** `cry0`。これらの SPA サイトは、ブラウザでの完全なレンダリング完了までデータが表示されません。
-- **DDoS 保護 / CAPTCHA:** `clop`。自動スクレイピングを妨げる強力な保護画面を備えています。
-- **待ち行列システム:** `shinyhunters`。アクセス待ち（Access Queue）画面で止まることがあります。
+- **DDoS 保護 / 待ち行列:** `clop`。自動スクレイピングを妨げる保護画面やアクセス待ち画面を備えています。
 - **中身が空 / オフライン:** `0x thief`, `abrahams ax` など。サイト自体がダウンしている場合に発生します。
+- **アクセス拒否:** `cloak` (403 Forbidden)。
+- **法執行機関による差し押さえ:** `ragnar locker`, `vanir`。
 
 *※ `thegentlemen` などの数学キャプチャ採用サイトは、AI（Gemini/OpenAI）による自動突破が可能になりました。*
-*※ `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, `termite` などの SPA/モダンテンプレート採用サイトについては、最新のアップデートにより自動解析・レンダリング待ちが可能になりました。*
+*※ `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, `termite`, `lockbit 3.0`, `shinyhunters` などの SPA/モダンテンプレート採用サイトについては、最新のアップデートにより自動解析・レンダリング待ちが可能になりました。*
 
 ---
 
