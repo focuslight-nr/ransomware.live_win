@@ -621,7 +621,7 @@ def get_country(victim,description='',website=''):
     if description == None:
         description = ''
     if description.startswith("Country:"):
-        country_name = description.replace("Country:", "").strip()
+        country_name = description.replace("Country:", "").split('\n')[0].strip()
     elif description.startswith("Country : "):
         country_name = description.split('-')[0].strip().replace("Country : ","")
 
@@ -847,7 +847,15 @@ def appender(victim,group_name,description='',website='', published='', post_url
         website = ''
 
     ### Get Country 
-    country = get_country(victim,description,website)
+    if not country:
+        country = get_country(victim,description,website)
+    
+    if country and len(country) > 2:
+        try:
+            country = pycountry.countries.lookup(country).alpha_2
+        except:
+            pass
+    
     if AI_ENRICHMENT_ENABLED and (AI_PROVIDER and (OPENAI_API_KEY or GEMINI_API_KEY)) and (country is None or len(country) < 2) and '*' not in victim:
         stdlog(f'Querying AI for "{victim}" country')
         prompt = f'I would like the 2 letters code of the country, and only the 2 letters not extra text, where the this company is located : "{victim}"'
