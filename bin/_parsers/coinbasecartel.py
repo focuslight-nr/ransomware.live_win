@@ -1,81 +1,129 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
-import sys
-import requests
-from datetime import datetime, timezone
+"""
+Minimal parser for Coinbasecartel (new layout)
+- Parses company rows from the Companies list
+- Extracts victim, detail URL, website, optional description
+- Matches ransomware.live minimal ingestion style
+"""
+
+import os, datetime, sys, re
 from bs4 import BeautifulSoup
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Add the parent directory of the current script's directory to the Python path
-# to ensure that shared_utils can be found
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared_utils import stdlog, errlog, appender
 
-# Group-specific details
-GROUP_NAME = "coinbasecartel"
-URL = "http://fjg4zi4opkxkvdz7mvwp7h6goe4tcby3hhkrz43pht4j3vakhy75znyd.onion"
+# ------------------------------------------------------------
+# Environment
+# ------------------------------------------------------------
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
-}
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
+
+BASE_URL = os.getenv(
+    "BASE_URL",
+    "http://fjg4zi4opkxkvdz7mvwp7h6goe4tcby3hhkrz43pht4j3vakhy75znyd.onion"
+)
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+def _group_name_from_self() -> str:
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        return os.path.basename(original_path).replace(".py", "")
+    return os.path.basename(script_path).replace(".py", "")
+
+
+def _normalize_post_url(href: str) -> str:
+    if not href:
+        return ""
+    if href.startswith("/"):
+        return BASE_URL.rstrip("/") + href
+    return href
+
+
+# ------------------------------------------------------------
+# Main parser
+# ------------------------------------------------------------
 def main():
-    stdlog(f"[{GROUP_NAME}] Starting parser")
-    
-    try:
-        # Fetch the main page
-        response = requests.get(URL, proxies=PROXIES, timeout=60)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        errlog(f"[{GROUP_NAME}] ❌ Error fetching page: {e}")
-        return
+    group_name = _group_name_from_self()
 
-    # Parse the HTML
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Find all victim articles
-    victim_articles = soup.find_all('article', class_='company-row')
-    
-    if not victim_articles:
-        errlog(f"[{GROUP_NAME}] ❌ Could not find any victim articles.")
-        return
+    for filename in os.listdir(tmp_dir):
+        if not filename.startswith(group_name + "-"):
+            continue
 
-    # Process each victim article
-    for article in victim_articles:
         try:
-            victim_name_tag = article.find('h3', class_='company-name')
-            if not victim_name_tag:
-                continue
-            victim_name = victim_name_tag.text.replace('\u2019', "'").replace('</span>', '').strip()
+            html_doc = tmp_dir / filename
+            with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
+                soup = BeautifulSoup(f, "html.parser")
 
-            website_tag = article.find(class_='company-website')
-            website = website_tag.text.strip() if website_tag else ''
+            # Featured description (only appears once)
+            featured_desc = ""
+            featured = soup.select_one("article.company-row-featured")
+            if featured:
+                desc = featured.select_one(".company-row-desc")
+                if desc:
+                    featured_desc = desc.get_text(" ", strip=True)
 
-            description_tag = article.find('p', class_='company-row-desc')
-            description = description_tag.text.strip() if description_tag else ''
+            # All company rows
+            rows = soup.select("article.company-row")
+            for row in rows:
+                # Victim name
+                name_tag = row.select_one("h3.company-name")
+                victim = name_tag.get_text(strip=True) if name_tag else "N/A"
 
-            post_url_tag = article.find('a', class_='btn-primary')
-            if post_url_tag and post_url_tag.get('href'):
-                post_url = URL + post_url_tag['href']
-            else:
-                post_url = URL
+                # Detail URL
+                link_tag = row.select_one(".company-row-actions a.btn-primary[href]")
+                post_url = _normalize_post_url(link_tag["href"]) if link_tag else ""
 
-            # No publication date on the main page, use current time
-            published = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                # Website (span or <a>)
+                website = ""
+                site_tag = row.select_one(".company-website")
+                if site_tag:
+                    website = site_tag.get_text(strip=True)
 
-            appender(
-                victim=victim_name,
-                group_name=GROUP_NAME,
-                description=description,
-                published=published,
-                post_url=post_url,
-                website=website
-            )
+                # Description
+                description = ""
+                if "company-row-featured" in row.get("class", []):
+                    description = featured_desc
+
+                published = ""
+                
+                appender(
+                    victim=victim,
+                    group_name=group_name,
+                    description=description,
+                    website=website,
+                    published=str(published),
+                    post_url=post_url,
+                    country=""
+                )
+
+                """
+                print('victim:', victim)
+                print('post_url:', post_url)
+                print('website:', website)
+                print('description:', description)
+                print('-' * 40)
+                """
+
         except Exception as e:
-            errlog(f"[{GROUP_NAME}] ❌ Error parsing an article: {e} - Article: {article.text.strip()}")
+            errlog(
+                f"{group_name} - parsing fail with error: {e} in file: {filename}"
+            )
 
-    stdlog(f"[{GROUP_NAME}] Parser finished.")
 
 if __name__ == "__main__":
     main()

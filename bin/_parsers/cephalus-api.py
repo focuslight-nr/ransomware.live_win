@@ -1,78 +1,78 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
-    Upgraded API Parser for Cephalus
+Generic parser template for ransomware.live
+Fetches JSON from a leak site
 """
 
-import os
-import json
-import requests
-import urllib3
+import requests,os
+import sys
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-from urllib.parse import urljoin
-from datetime import datetime, timezone
-from shared_utils import appender, stdlog, errlog
+from shared_utils import stdlog, errlog, appender
 
-# -------------------- CONFIG --------------------
-script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
+# Load env
+env_path = Path("../.env")
 load_dotenv(dotenv_path=env_path)
 
-db_dir = home / os.getenv("DB_DIR", "db").strip("/")
-proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+# Source URL (à personnaliser selon le parser)
+URL = "http://cephalus6oiypuwumqlwurvbmwsfglg424zjdmywfgqm4iehkqivsjyd.onion/api/domains"
 
-target_group_name = "cephalus"
-api_endpoint_suffix = "/api/domains"
-
-# Disable the warning about certificate verification
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Dynamic proxy settings
-proxies = {
-    'http': proxy_address.replace('socks5://', 'socks5h://'),
-    'https': proxy_address.replace('socks5://', 'socks5h://')
+PROXIES = {
+    "http": "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050"
 }
 
-def get_base_urls():
+
+def fetch_data():
     try:
-        groups_file = db_dir / "groups.json"
-        if not groups_file.exists():
-            return []
-        with open(groups_file, 'r', encoding='utf-8') as file:
-            groups_data = json.load(file)
-        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-        if group and group.get('locations'):
-            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
+        r = requests.get(URL, proxies=PROXIES, timeout=60)
+        r.raise_for_status()
+        return r.json()
     except Exception as e:
-        errlog(f"Error reading groups.json: {e}")
-    return []
+        errlog(f"[{GROUP_NAME}] ❌ Error fetching data: {e}")
+        return []
+        
 
 def main():
-    base_urls = get_base_urls()
-    if not base_urls:
-        stdlog(f"No enabled locations found for {target_group_name} in DB.")
-        base_urls = ['http://cephalus6oiypuwumqlwurvbmwsfglg424zjdmywfgqm4iehkqivsjyd.onion']
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace('.py','')
+    else:
+        group_name = os.path.basename(script_path).replace('.py','')
+    group_name = group_name.replace('-api','')
 
-    for base_url in base_urls:
-        full_api_url = urljoin(base_url + '/', api_endpoint_suffix.lstrip('/'))
-        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
-        
-        try:
-            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
-            if response.status_code == 200:
-                data = response.json()
-                for entry in data:
-                    victim = entry.get("company") or entry.get("domain")
-                    description = entry.get("description") or ""
-                    website = entry.get("domain") or ""
-                    post_url = entry.get("dataLink") or ""
-                    
-                    appender(victim, target_group_name, description, website, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), post_url)
-                return
-            else:
-                errlog(f"API Error ({response.status_code}) for {full_api_url}")
-        except Exception as e:
-            errlog(f"Cephalus API Error for {base_url}: {e}")
+    data = fetch_data()
+    if not data:
+        return
+    """
+    data = [
+            {"domain":"carestlhealth.org","company":"CareSTL Health","logoContent":"CARESTL","description":"CareSTL Health DATA Leak | 500+GB | KAWA4096 STEALED our data","dataLink":"https://darkforums.st/Thread-CareSTL-Health-DATA-Leak-500-GB"},{"domain":"system-exe.co.jp","company":"SystemExec Co., Ltd.","logoContent":"SYSTEM-EXE","description":"SystemExec Co., Ltd. (システムエグゼ) GitLab naked repo leak | 30G+","dataLink":"https://darkforums.st/Thread-Source-Code-SystemExec-Co-Ltd-%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0%E3%82%A8%E3%82%B0%E3%82%BC-GitLab-naked-repo-leak-30G"},{"domain":"bararch.com","company":"BAR Architects & Interiors","logoContent":"BARARCH","description":"BAR Architects & Interiors DATA LEAK | 1.5T+","dataLink":"https://darkforums.st/Thread-Document-BAR-Architects-Interiors-DATA-LEAK-1-5T--18961"},{"domain":"kstrategies.com","company":"K Strategies Marketing and Public Relations","logoContent":"KSTRATEGIE","description":"K Strategies Marketing and Public Relations LEAK | 900+GB","dataLink":"https://darkforums.st/Thread-Document-K-Strategies-Marketing-and-Public-Relations-LEAK-900-GB"},{"domain":"balancedsolutions4me.com","company":"LPL Financial","logoContent":"BALANCEDSO","description":"LPL Financial DATA LEAK | (I FORGOT THE SIZE,BUT ITS HUGE)","dataLink":"https://darkforums.st/Thread-Document-LPL-Financial-DATA-LEAK-I-FORGOT-THE-SIZE-BUT-ITS-HUGE"},{"domain":"gmllp.com","company":"Guerrero Mears LLP","logoContent":"GMLLP","description":"Guerrero Mears LLP DATALEAK | (FORGOT THE SIZE)","dataLink":"https://darkforums.st/Thread-Document-Guerrero-Mears-LLP-DATALEAK-FORGOT-THE-SIZE"},{"domain":"sskrplaw.com","company":"Sherman, Silverstein, Kohl, Rose & Podolsky, P.A.","logoContent":"SSKRPLAW","description":"SSKRPLAW DATA LEAK | (5GB+ ZIP)","dataLink":"https://darkforums.st/Thread-Document-SSKRPLAW-DATA-LEAK-5GB-ZIP"},{"domain":"lee-irvine.com","company":"Lee & Associates","logoContent":"LEE-IRVINE","description":"Lee & Associates DATA LEAK | (TB)","dataLink":"https://darkforums.st/Thread-Lee-Associates-DATA-LEAK-TB"},{"domain":"txpregnancy.org","company":"txpregnancy.org - Fake Abortion Clinics Exposed","logoContent":"TXPREGNANC","description":"coming soon","dataLink":""}
+]
+    """
+
+
+    for entry in data:
+        victim = entry.get("company") or entry.get("domain")
+        description = entry.get("description") or ""
+        website = entry.get("domain") or ""
+        post_url = entry.get("dataLink") or ""
+
+        added = appender(
+            victim=victim,
+            group_name=group_name,
+            description=description,
+            website=website,
+            published=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            post_url=post_url,
+            country="",
+            extra_infos=[]
+        )
 
 if __name__ == "__main__":
     main()

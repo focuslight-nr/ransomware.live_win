@@ -15,17 +15,24 @@ from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, e
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     for filename in os.listdir(tmp_dir):
         try:
             if filename.startswith('flocker-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 entries = soup.find_all('h2', class_='entry-title ast-blog-single-element')
                 for entry in entries:

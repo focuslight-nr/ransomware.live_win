@@ -1,71 +1,106 @@
 import os, datetime, sys, re
 from bs4 import BeautifulSoup
+from datetime import datetime
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
-from datetime import datetime
-from urllib.parse import urljoin
+import pycountry
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent.parent
-env_path = project_root / ".env"
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
+
+def to_country_code(country_string):
+    try:
+        country_name = country_string.split(",")[0].strip()
+        country = pycountry.countries.lookup(country_name)
+        return country.alpha_2
+    except:
+        return ""
+
+
 def main():
-    group_name = 'underground'
-    stdlog(f"Processing group: {group_name}")
-    
+    # Date conversion (not used here, but defined if needed later)
+    date_format = "%Y-%m-%d %H:%M:%S.%f"
+
+    # Determine the ransomware group name from the script filename
+    script_path = os.path.abspath(__file__)
+    group_name = os.path.basename(script_path).replace('.py', '')
+    if os.path.islink(script_path):
+        original_path = os.path.realpath(script_path)
+        group_name = os.path.basename(original_path).replace('.py', '')
+
     for filename in os.listdir(tmp_dir):
-        if filename.startswith('teamunderground-'):
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
+        try:
+            if filename.startswith(group_name + '-'):
+                html_doc = tmp_dir / filename
                 with open(html_doc, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'html.parser')
-                
-                # Get base URL
-                md5_val = extract_md5_from_filename(str(html_doc))
-                base_url = find_slug_by_md5(group_name, md5_val)
-                if base_url:
-                    base_url = base_url.rstrip('/')
 
-                # Cards are in a grid
-                items = soup.find_all('div', class_='col-lg-6')
-                if not items:
-                    items = soup.find_all('div', class_='col-md-4')
+                    for pkg in soup.select("div.block__package"):
+                        name_tag = pkg.select_one("span:contains('Name:') + p")
+                        name = name_tag.get_text(strip=True) if name_tag else "Unknown"
 
-                stdlog(f"Found {len(items)} items for {group_name}")
-                for item in items:
-                    try:
-                        # Extract Name
-                        name_span = item.find('span', string=re.compile(r'Name:', re.I))
-                        if not name_span: continue
-                        victim = name_span.find_next('p').get_text(strip=True)
-                        
-                        # Extract Website / Info
-                        description = ""
-                        info_divs = item.find_all('div')
-                        for info in info_divs:
-                            span = info.find('span')
-                            p = info.find('p')
-                            if span and p:
-                                description += f"{span.get_text(strip=True)} {p.get_text(strip=True)}; "
-                        
-                        # Extract Link
-                        post_url = ""
-                        link_a = item.find('a', class_='stretched-link')
-                        if link_a:
-                            post_url = urljoin(base_url + '/', link_a['href']) if base_url else link_a['href']
-                        
-                        appender(victim, group_name, description, "", "", post_url)
-                    except Exception as e:
-                        errlog(f'{group_name} - error parsing card: {e}')
-            except Exception as e:
-                errlog(f'{group_name} - error reading file {filename}: {e}')
+                        description_parts = []
 
-if __name__ == "__main__":
-    main()
+                        rev_tag = pkg.select_one("span:contains('Revenue:') + p")
+                        if rev_tag:
+                            description_parts.append(f"Revenue: {rev_tag.get_text(strip=True)}")
+
+                        type_tag = pkg.select_one("span:contains('Type:') + p")
+                        if type_tag:
+                            description_parts.append(f" Type: {type_tag.get_text(strip=True)}")
+ 
+                        size_tag = pkg.select_one("span:contains('Size:') + p")
+                        if size_tag:
+                            description_parts.append(f" Size: {size_tag.get_text(strip=True)}")
+
+                        date_tag = pkg.select_one("span:contains('Date:') + p")
+                        if date_tag:
+                            raw_date = date_tag.get_text(strip=True)
+                            try:
+                                parsed_date = datetime.strptime(raw_date, "%m/%d/%Y %H:%M")
+                                formatted_date = parsed_date.strftime("%Y-%m-%d %H:%M:%S.%f")
+                            except:
+                                formatted_date = ""
+                        else:
+                            formatted_date = ""
+
+                        country_tag = pkg.select_one("span:contains('Сountry:') + p")
+                        country_raw = country_tag.get_text(strip=True) if country_tag else ""
+                        country_code = to_country_code(country_raw)
+                        
+                        full_description = "\n".join(description_parts)
+
+                        filling = pkg.find_parent("div", class_="filling")
+                        a_tag = filling.find("a", class_="stretched-link") if filling else None
+                        href = a_tag["href"] if a_tag and a_tag.has_attr("href") else ""
+                        post_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) + href
+
+                        #print('victim:', name)
+                        #print('group_name:', group_name)
+                        #print('description:', full_description)
+                        #print('published:', formatted_date)
+                        #print('post_url:', post_url)
+                        #print('country:', country_code)
+                        #print('*' * 20)
+                        appender(
+                            victim=name,
+                            group_name=group_name,
+                            description=full_description,
+                            website="",  # no direct website listed
+                            published=formatted_date,  # no exact published timestamp
+                            post_url=post_url,
+                            country=country_code,
+                        )
+
+        except Exception as e:
+            errlog(f"{group_name} - parsing fail with error: {e} in file: {filename}")

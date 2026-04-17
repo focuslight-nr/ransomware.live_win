@@ -1,79 +1,99 @@
-"""
-    Parser for ALP-001
-"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import os
+import os, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog
 from pathlib import Path
 from dotenv import load_dotenv
-from urllib.parse import urljoin
+, find_slug_by_md5, extract_md5_from_filename, stdlog
 
-# -------------------- CONFIG --------------------
-script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
+env_path = Path("../.env")
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+home    = os.getenv("RANSOMWARELIVE_HOME", "")
+tmp_dir = Path(home + os.getenv("TMP_DIR", "./tmp"))
 
-target_group_name = "alp-001"
-base_url = "http://qthem3ogqqixjhhwacto6pqbjfy2vcykdlz7woulnewsrwy4lfjocfqd.onion"
+
+def normalize_desc(node) -> str:
+    if node is None:
+        return ""
+    for br in node.find_all("br"):
+        br.replace_with("\n")
+    txt = node.get_text(separator=" ", strip=True)
+    txt = re.sub(r"[ \t]*\n[ \t]*", "\n", txt)
+    txt = re.sub(r"[ \t]{2,}", " ", txt).strip()
+    return txt
+
 
 def main():
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace(".py", "")
+    else:
+        group_name = os.path.basename(script_path).replace(".py", "")
+
     for filename in os.listdir(tmp_dir):
-        if filename.startswith('alp-001-'):
+        if not filename.startswith(group_name + "-"):
+            continue
+
+        try:
             html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                articles = soup.find_all('div', class_='article-item')
-                for article in articles:
-                    try:
-                        title_tag = article.find('h3')
-                        if not title_tag:
-                            continue
-                        victim = title_tag.text.strip()
-                        
-                        description = ""
-                        country = ""
-                        
-                        p_tags = article.find_all('p')
-                        for p in p_tags:
-                            # Using get_text with separator to avoid merged lines
-                            p_text = p.get_text(separator="\n").strip()
-                            if "Deadline:" in p_text:
-                                continue
-                            
-                            if "Country:" in p_text:
-                                lines = p_text.split('\n')
-                                for line in lines:
-                                    line_clean = line.strip()
-                                    if line_clean.lower().startswith("country:"):
-                                        country = line_clean[len("country:"):].strip()
-                            
-                            if description:
-                                description += "\n" + p_text
-                            else:
-                                description = p_text
-                        
-                        website = ""
-                        if "." in victim and " " not in victim:
-                            website = victim
-                        
-                        link_tag = article.find('a', class_='sample-btn', href=True)
-                        post_url = ""
-                        if link_tag and link_tag['href'] != "#":
-                            post_url = urljoin(base_url, link_tag['href'])
-                        
-                        appender(victim, target_group_name, description, website, "", post_url, country)
-                    except Exception as e:
-                        errlog(f'{target_group_name} - error parsing item: {e}')
-            except Exception as e:
-                errlog(f'{target_group_name} - error reading file {filename}: {e}')
+            with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
+                soup = BeautifulSoup(f, "html.parser")
+
+            cards = soup.find_all("div", class_="article-item")
+            if not cards:
+                errlog(group_name + f" - no .article-item found in {filename}")
+                continue
+
+            base_post_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))
+
+            for card in cards:
+                try:
+                    h3 = card.find("h3")
+                    if not h3:
+                        errlog(group_name + f" - missing <h3> in {filename}")
+                        continue
+
+                    victim   = h3.get_text(strip=True)
+                    website  = victim  # h3 contains the domain
+                    post_url = base_post_url + "#" + victim
+
+                    # First <p> holds the metadata (Country, Revenue, Storage…)
+                    paras = card.find_all("p")
+                    description = normalize_desc(paras[0]) if paras else ""
+
+                    # Extract Storage value for extra_infos
+                    extra_infos = {"ransom": "", "data_size": ""}
+                    storage_match = re.search(r"Storage:\s*(.+)", description, re.IGNORECASE)
+                    if storage_match:
+                        extra_infos["data_size"] = storage_match.group(1).strip()
+
+                    # Append deadline if present
+                    countdown = card.find("span", class_="countdown")
+                    if countdown:
+                        deadline = countdown.get("data-deadline", "")
+                        if deadline:
+                            description += f"\nDeadline: {deadline}"
+
+                    appender(
+                        victim=victim,
+                        group_name=group_name,
+                        description=description,
+                        website=website,
+                        post_url=post_url,
+                        extra_infos=extra_infos,
+                    )
+                except Exception as ie:
+                    errlog(group_name + f" - card parse error: {ie} in file: {filename}")
+                    continue
+
+        except Exception as e:
+            errlog(group_name + " - parsing fail with error: " + str(e) + " in file: " + filename)
+
 
 if __name__ == "__main__":
     main()

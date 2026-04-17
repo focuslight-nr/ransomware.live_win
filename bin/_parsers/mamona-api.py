@@ -1,80 +1,23 @@
-"""
-    Upgraded API Parser for Mamona Ransomware
-"""
-
-import os
-import json
 import requests
-import urllib3
-from pathlib import Path
-from dotenv import load_dotenv
-from urllib.parse import urljoin
-from shared_utils import appender, stdlog, errlog
+from shared_utils import msgtoPushover
 
-# -------------------- CONFIG --------------------
-script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
-load_dotenv(dotenv_path=env_path)
+# Define the URL
+onion_url = "http://owt3kwkxod2pvxlv3uljzskfhebhrhoedrh5gqrxyyd6rrco4frzj5ad.onion/api/posts"
 
-db_dir = home / os.getenv("DB_DIR", "db").strip("/")
-proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
-
-target_group_name = "mamona ransomware"
-api_endpoint_suffix = "api/posts"
-
-# Disable the warning about certificate verification
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Dynamic proxy settings
+# Use the Tor network for routing requests
 proxies = {
-    'http': proxy_address.replace('socks5://', 'socks5h://'),
-    'https': proxy_address.replace('socks5://', 'socks5h://')
+    "http": "socks5h://127.0.0.1:9050",
+    "https": "socks5h://127.0.0.1:9050",
 }
 
-def get_base_urls():
-    try:
-        groups_file = db_dir / "groups.json"
-        if not groups_file.exists():
-            return []
-        with open(groups_file, 'r', encoding='utf-8') as file:
-            groups_data = json.load(file)
-        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-        if group and group.get('locations'):
-            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
-    except Exception as e:
-        errlog(f"Error reading groups.json: {e}")
-    return []
-
 def main():
-    base_urls = get_base_urls()
-    if not base_urls:
-        stdlog(f"No enabled locations found for {target_group_name} in DB.")
-        base_urls = ['http://owt3kwkxod2pvxlv3uljzskfhebhrhoedrh5gqrxyyd6rrco4frzj5ad.onion']
-
-    for base_url in base_urls:
-        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
-        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
-        
-        try:
-            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
-            if response.status_code == 200:
-                json_data = response.json()
-                if isinstance(json_data, list):
-                    for post in json_data:
-                        victim = post.get('title', 'Unknown')
-                        description = post.get('content', '') or post.get('description', '')
-                        published = post.get('created_at', '') or post.get('published_at', '')
-                        website = post.get('website', '')
-                        post_id = post.get('id', '')
-                        post_url = urljoin(base_url + '/', f"post/{post_id}") if post_id else ""
-                        
-                        appender(victim, 'mamona', description, website, published, post_url)
-                    return
-            else:
-                errlog(f"API Error ({response.status_code}) for {full_api_url}")
-        except Exception as e:
-            errlog(f"Mamona API Error for {base_url}: {e}")
-
-if __name__ == "__main__":
-    main()
+    try:
+        response = requests.get(onion_url, proxies=proxies, timeout=10)
+        if response.status_code == 200:
+            json_data = response.json()
+            if json_data:  # Check if the response is not empty
+                msgtoPushover("MAMONA VICTIM DETECTED !!!")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except requests.RequestException as e:
+        print(f"Request failed: {e}")

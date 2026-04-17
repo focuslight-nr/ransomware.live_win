@@ -1,84 +1,100 @@
-import os, re
+import os, datetime, sys, re
+import pycountry
 from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
+, extract_md5_from_filename, find_slug_by_md5
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent.parent
-env_path = project_root / ".env"
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
+
+def convert_country_to_iso2(name):
+    """Convert country name to ISO ALPHA-2."""
+    if not name:
+        return ""
+    try:
+        country = pycountry.countries.lookup(name)
+        return country.alpha_2
+    except Exception:
+        return ""
+
+def convert_date(date_str):
+    """Convert MM/DD/YYYY -> YYYY-MM-DD 00:00:00.000000"""
+    try:
+        dt = datetime.datetime.strptime(date_str, "%m/%d/%Y")
+        return dt.strftime("%Y-%m-%d 00:00:00.000000")
+    except Exception:
+        return ""
+
 def main():
-    group_name = "kairos"
-    stdlog(f"Processing group: {group_name}")
+    script_path = os.path.abspath(__file__)
+    group_name = os.path.basename(script_path).replace(".py", "")
 
     for filename in os.listdir(tmp_dir):
         try:
-            if filename.startswith(group_name + '-'):
-                html_doc = tmp_dir / filename
-                stdlog(f"Parsing: {html_doc}")
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Get base URL for links
-                base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc))) or ""
-                if base_url: base_url = base_url.rstrip('/')
+            if not filename.startswith(group_name + "-"):
+                continue
 
-                # The HTML structure has victim items in cards
-                cards = soup.find_all('div', attrs={'data-slot': 'card'})
-                for card in cards:
-                    try:
-                        title_tag = card.find('h3')
-                        if not title_tag:
-                            continue
-                        
-                        title = title_tag.get_text(strip=True)
-                        if not title:
-                            continue
+            html_doc = tmp_dir / filename
+            with open(html_doc, "r", encoding="utf-8") as file:
+                soup = BeautifulSoup(file, "html.parser")
 
-                        # Extract description
-                        description = ""
-                        desc_tag = card.find('p', class_=re.compile(r'text-sm'))
-                        if desc_tag:
-                            description = desc_tag.get_text(strip=True)
+            cards = soup.select("div[data-slot='card']")
+            if not cards:
+                errlog(f"{group_name} - no cards found in file: {filename}")
+                continue
 
-                        # Extract country and data size
-                        country = ""
-                        data_size = ""
-                        info_labels = card.find_all('span', class_='text-muted-foreground')
-                        for label in info_labels:
-                            text = label.get_text(strip=True)
-                            value_tag = label.find_next_sibling('span')
-                            if value_tag:
-                                value = value_tag.get_text(strip=True)
-                                if "Country" in text:
-                                    country = value
-                                elif "Data" in text:
-                                    data_size = value
-                        
-                        if data_size:
-                            description = f"[{data_size}] {description}"
+            md5 = extract_md5_from_filename(str(html_doc))
 
-                        # Extract "PUBLISHED" status
-                        published = ""
-                        status_tag = card.find('span', string=re.compile(r'PUBLISHED'))
-                        if status_tag:
-                            published = "Published"
+            for card in cards:
+                # victim/company
+                h3 = card.select_one("h3.text-xl")
+                victim = h3.get_text(strip=True) if h3 else "N/A"
 
-                        # Link
-                        link = base_url
+                # published date
+                date_tag = card.select_one("div.flex.items-center.justify-between > span.text-xs")
+                published_raw = date_tag.get_text(strip=True) if date_tag else ""
+                published = convert_date(published_raw)
 
-                        appender(title, group_name, description, '', published, link, country)
-                    except Exception as e:
-                        errlog(f"{group_name} - card parse fail: {e}")
+                # description
+                desc = card.select_one("p.text-muted-foreground")
+                description = desc.get_text(strip=True) if desc else ""
+
+                # country
+                country_tag = card.find("span", string="Country:")
+                if country_tag:
+                    country_val = country_tag.find_next("span").get_text(strip=True)
+                    country = convert_country_to_iso2(country_val)
+                else:
+                    country = ""
+
+
+                if victim != "N/A":
+                    appender(
+                        victim=victim,
+                        group_name=group_name,
+                        description=description,
+                        website="",
+                        published=published,
+                        post_url="",
+                        country=country
+                    )
+                """
+
+                print('victim:',victim)
+                print('description:',description)
+                print('published:',published)
+                print('country:',country)
+                print('*'*40)
+                """
         except Exception as e:
-            errlog(f"{group_name} - file process fail: {e} in file: {filename}")
-
-if __name__ == "__main__":
-    main()
+            errlog(f"{group_name} - parsing fail with error: {e} in file: {filename}")

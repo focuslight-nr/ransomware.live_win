@@ -20,3 +20,5 @@ pandas
 rapidfuzz
 google-genai
 openpyxl
+anthropic
+filelock>=3.20.1

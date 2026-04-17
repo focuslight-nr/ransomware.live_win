@@ -1,15 +1,18 @@
-"""
-    Parser for 0APT (Independent Organization)
-"""
-
 import os
+import datetime
+import json
+import re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog
 from pathlib import Path
 from dotenv import load_dotenv
-from urllib.parse import urljoin
 
+
+# ------------------------------------------------------------
+# Environment
+# ------------------------------------------------------------
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
@@ -18,38 +21,144 @@ load_dotenv(dotenv_path=env_path)
 home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-target_group_name = "0apt"
-base_url = "http://oaptxiyisljt2kv3we2we34kuudmqda7f2geffoylzpeo7ourhtz4dad.onion"
 
+# Optional base URL (e.g., onion address)
+BASE_URL = os.getenv("BASE_URL", "").strip()
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+def to_micro_ts(date_str: str) -> str:
+    """
+    Convert JS date strings like:
+      'Feb 1, 2026 15:00:00'
+    to 'YYYY-MM-DD HH:MM:SS.microseconds'
+    """
+    if not date_str:
+        return ""
+    try:
+        dt = datetime.datetime.strptime(date_str.strip(), "%b %d, %Y %H:%M:%S")
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    except Exception:
+        return ""
+
+def strip_scheme(url: str) -> str:
+    if not url:
+        return ""
+    return re.sub(r"^https?://", "", url.strip(), flags=re.IGNORECASE)
+
+def host_without_scheme(url: str) -> str:
+    if not url:
+        return ""
+    no_scheme = strip_scheme(url)
+    return no_scheme.split("/", 1)[0]
+
+def extract_timeline_data(soup: BeautifulSoup) -> dict:
+    """
+    Extract timelineData from embedded JS and return:
+      { victim_name: published_ts }
+    """
+    published_map = {}
+
+    scripts = soup.find_all("script")
+    for script in scripts:
+        if not script.string or "timelineData" not in script.string:
+            continue
+
+        m = re.search(
+            r"const\s+timelineData\s*=\s*(\[.*?\]);",
+            script.string,
+            re.DOTALL
+        )
+        if not m:
+            continue
+
+        raw = m.group(1)
+
+        # Convert JS object to valid JSON
+        cleaned = re.sub(r"(\w+)\s*:", r'"\1":', raw)
+        cleaned = cleaned.replace("'", '"')
+
+        try:
+            data = json.loads(cleaned)
+            for item in data:
+                victim = item.get("heading", "").strip()
+                target = item.get("targetTime", "")
+                published = to_micro_ts(target)
+                if victim and published:
+                    published_map[victim] = published
+        except Exception:
+            pass
+
+    return published_map
+
+# ------------------------------------------------------------
+# Main
+# ------------------------------------------------------------
 def main():
+    # Derive group_name from script filename
+    script_path = os.path.abspath(__file__)
+    group_name = os.path.basename(script_path).replace(".py", "")
+
+    # Iterate over downloaded HTML files
     for filename in os.listdir(tmp_dir):
-        if filename.startswith('0apt-'):
+        try:
+            if not filename.startswith(group_name + "-"):
+                continue
+
             html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
+            with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
+                soup = BeautifulSoup(f, "html.parser")
+
+            container = soup.find("div", id="dynamic-container")
+            if not container:
+                continue
+
+            # Extract published timestamps from JS
+            published_map = extract_timeline_data(soup)
+
+            cards = container.find_all("div", class_="card")
+            for card in cards:
+                h3 = card.find("h3")
+                p = card.find("p")
+
+                victim = h3.get_text(strip=True) if h3 else "N/A"
+                description = p.get_text(" ", strip=True) if p else ""
+
+                published = published_map.get(victim, "")
+
+                post_url = BASE_URL
+                website = host_without_scheme(BASE_URL)
+
+                # ------------------------------------------------
+                # DEBUG OUTPUT
+                # ------------------------------------------------
+                '''
+                print('victim:', victim)
+                print('post_url:', post_url)
+                print('published:', published)
+                print('website:', website)
+                print('description:', description)
+                print('-' * 40)
+                '''
+                # ------------------------------------------------
+                # Append record
+                # ------------------------------------------------
                 
-                # Using general card structure (to be verified upon first scrape)
-                cards = soup.find_all('div', class_='card')
-                for card in cards:
-                    try:
-                        title_tag = card.find(['h3', 'h2'])
-                        if not title_tag:
-                            continue
-                        victim = title_tag.text.strip()
-                        
-                        desc_tag = card.find('p')
-                        description = desc_tag.text.strip() if desc_tag else ""
-                        
-                        link_tag = card.find('a', href=True)
-                        post_url = urljoin(base_url, link_tag['href']) if link_tag else ""
-                        
-                        appender(victim, target_group_name, description, "", "", post_url)
-                    except Exception as e:
-                        errlog(f'{target_group_name} - error parsing item: {e}')
-            except Exception as e:
-                errlog(f'{target_group_name} - error reading file {filename}: {e}')
+                appender(
+                    victim=victim,
+                    group_name=group_name,
+                    description=description,
+                    website=website,
+                    published=published,
+                    post_url=post_url,
+                    country=""
+                )
+
+        except Exception as e:
+            errlog(
+                f"{group_name} - parsing fail with error: {e} in file: {filename}"
+            )
 
 if __name__ == "__main__":
     main()

@@ -33,10 +33,10 @@ from libcapture import capture_group
 
 # -------------------- CONFIG OVERRIDES --------------------
 # Any group name in this set will be scraped via simple Tor HTTP (requests)
-SPECIAL_HTML_FETCH_GROUPS = {"interlock"}  # extend as needed, e.g., {"interlock", "examplegroup"}
+SPECIAL_HTML_FETCH_GROUPS = {"interlock", "worldleaks"}  # extend as needed, e.g., {"interlock", "examplegroup"}
 
 # Groups that require extra time for JavaScript rendering (SPA)
-SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks", "lockbit 5.0", "shinyhunters", "lapsus$group"}
+SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks", "lockbit 5.0", "shinyhunters", "lapsus$group", "clop"}
 
 # -------------------- ENV LOADING --------------------
 script_dir = Path(__file__).resolve().parent
@@ -72,7 +72,7 @@ AI_CAPTCHA_SOLVING_ENABLED = os.getenv('AI_CAPTCHA_SOLVING_ENABLED', 'false').lo
 def solve_captcha_image(base64_image: str) -> str:
     # Use OpenAI or Gemini vision models
     provider = AI_PROVIDER.lower()
-    prompt = "Solve this math captcha. Provide ONLY the final numeric answer, no other text."
+    prompt = "Solve this captcha. If it is a math problem, provide ONLY the numeric answer. If it is a text/alphanumeric captcha, provide ONLY the characters. No other text."
     
     if provider == 'gemini':
         if not GEMINI_API_KEY:
@@ -506,6 +506,45 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                 except Exception as qe:
                                     stdlog(f"[{group_name}] Queue wait timed out or failed: {str(qe).splitlines()[0]}")
                             
+                            # Special handling for clop queue and captcha
+                            if group_name.lower() == "clop":
+                                try:
+                                    # 1. Handle Access Queue redirect
+                                    title = await page.title()
+                                    if "Access Queue" in title:
+                                        stdlog(f"[{group_name}] Access Queue detected. Waiting for redirect (max 5 minutes)...")
+                                        # Wait for title change or captcha form
+                                        try:
+                                            await page.wait_for_function("document.title !== 'Access Queue'", timeout=300000)
+                                            stdlog(f"[{group_name}] Redirected from queue.")
+                                        except:
+                                            stdlog(f"[{group_name}] Queue wait timed out.")
+
+                                    # 2. Handle DDOS Protection Captcha
+                                    title = await page.title()
+                                    if "DDOS Protection" in title or await page.query_selector('form.ddos_form'):
+                                        stdlog(f"[{group_name}] DDOS Protection Captcha detected.")
+                                        # Clop uses background-image:url(data:image/png;base64,...) in .imgWrap
+                                        img_wrap = await page.query_selector('.imgWrap')
+                                        if img_wrap:
+                                            style = await img_wrap.get_attribute('style')
+                                            if "base64," in style:
+                                                base64_data = style.split("base64,")[1].split(")")[0]
+                                                stdlog(f"[{group_name}] Solving alphanumeric captcha via AI...")
+                                                answer = await asyncio.to_thread(solve_captcha_image, base64_data)
+                                                if answer:
+                                                    # clean the answer: alphanumeric only
+                                                    answer = ''.join(filter(str.isalnum, answer))
+                                                    if answer:
+                                                        stdlog(f"[{group_name}] AI answered: {answer}")
+                                                        await page.fill('input[name="cap"]', answer)
+                                                        await page.click('button.before')
+                                                        stdlog(f"[{group_name}] Waiting for captcha validation...")
+                                                        await asyncio.sleep(10)
+                                                        await page.wait_for_load_state("networkidle", timeout=30000)
+                                except Exception as ce:
+                                    errlog(f"[{group_name}] Error during clop bypass: {ce}")
+
                             # Special handling for shinyhunters entry gate
                             if group_name.lower() == "shinyhunters":
                                 try:

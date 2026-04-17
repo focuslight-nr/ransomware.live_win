@@ -8,18 +8,24 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os
-from urllib.parse import urljoin
+import os,datetime,sys
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     for filename in os.listdir(tmp_dir):
@@ -27,7 +33,7 @@ def main():
             if filename.startswith('lockbit3-'):
                 html_doc= tmp_dir / filename
                 #stdlog('Processing ' + filename)
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name=soup.find_all('div', {"class": "post-block bad"})
                 '''
@@ -68,7 +74,7 @@ def main():
                         link = div['href']
                         url = find_slug_by_md5('lockbit3', extract_md5_from_filename(str(html_doc)))
                         #url = 'http://lbb6ud2vyf23z4hw6fzskr5gru7eftbjfbd6yzra3hzuqqvjy63blqqd.onion/'
-                        post = urljoin(url, link)
+                        post = url  + link
                         published = div.find('div',{"class" : "updated-post-date"}).text.strip()
                         date_obj = datetime.strptime(published.replace('Updated: ',''), "%d %b, %Y,\xa0\xa0 %H:%M %Z")
                         published = date_obj.strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -83,7 +89,7 @@ def main():
                         link = div['href']
                         url = find_slug_by_md5('lockbit3', extract_md5_from_filename(str(html_doc)))
                         #url = 'http://lockbit3753ekiocyo5epmpy6klmejchjtzddoekjlnt6mu3qh4de2id.onion/'
-                        post = urljoin(url, link)
+                        post = url  + link
                         published = div.find('div',{"class" : "updated-post-date"}).text.strip()
                         date_obj = datetime.strptime(published.replace('Updated: ',''), "%d %b, %Y,\xa0\xa0 %H:%M %Z")
                         published = date_obj.strftime("%Y-%m-%d %H:%M:%S.%f")

@@ -67,6 +67,9 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # Gemini
 GEMINI_API_KEY= os.getenv('GEMINI_API_KEY')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'models/gemini-2.5-flash')
+# Anthropic
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
 
 AI_ENRICHMENT_ENABLED = os.getenv('AI_ENRICHMENT_ENABLED', 'true').lower() == 'true'
 
@@ -141,7 +144,7 @@ def check_image_for_face(image_path, scaleFactor=1.1, minNeighbors=5, minSize=(3
 
 def query_ai(prompt):
     """
-    Queries the configured AI provider (OpenAI or Gemini) with a given prompt.
+    Queries the configured AI provider (OpenAI, Gemini, or Anthropic) with a given prompt.
     """
     provider = AI_PROVIDER.lower()
     
@@ -174,9 +177,28 @@ def query_ai(prompt):
         except Exception as e:
             print(f"[!] OpenAI API error: {e}")
             return None
+
+    elif provider == 'anthropic':
+        if not ANTHROPIC_API_KEY:
+            errlog("ANTHROPIC_API_KEY not set in .env file.")
+            return None
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            message = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=1000,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            # Anthropic returns a list of content blocks
+            return message.content[0].text
+        except Exception as e:
+            errlog(f"Anthropic API error: {e}")
+            return None
             
     else:
-        errlog(f"Unknown AI_PROVIDER '{AI_PROVIDER}' in .env file. Please use 'openai' or 'gemini'.")
+        errlog(f"Unknown AI_PROVIDER '{AI_PROVIDER}' in .env file. Please use 'openai', 'gemini', or 'anthropic'.")
         return None
 
 def openjson(file):

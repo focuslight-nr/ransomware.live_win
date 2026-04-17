@@ -16,10 +16,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 import datetime
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     script_path = os.path.abspath(__file__)
@@ -39,7 +46,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name = soup.find_all('div', {"class": "col-lg-4 col-sm-6 mb-4"})
                 for div in divs_name:

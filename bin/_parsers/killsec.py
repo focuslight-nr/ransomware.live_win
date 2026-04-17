@@ -15,66 +15,91 @@ from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, e
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 
 def main():
     for filename in os.listdir(tmp_dir):
         try:
-            if filename.startswith('killsec-'):
-                html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
-                soup=BeautifulSoup(file,'html.parser')
-                divs_name=soup.find_all('a', {"class": "post-block unleaked"})
-                address  = find_slug_by_md5('killsec', extract_md5_from_filename(str(html_doc))) 
-                for div in divs_name:
-                    title = div.find('div',{"class": "post-title"}).text.strip()
-                    description = div.find('p',{"class" : "post-block-text"}).text.strip()
-                    try :
-                        link =  address + '/' + div['href']
-                    except:
-                        link = ''
-                    appender(title,'killsec',description,'','',link)
-                divs_name=soup.find_all('a', {"class": "post-block leaked"})
-                for div in divs_name:
-                    title = div.find('div',{"class": "post-title"}).text.strip()
-                    description = div.find('p',{"class" : "post-block-text"}).text.strip()
-                    try :
-                        link =  address + '/' + div['href']
-                    except:
-                        link = ''
-                    appender(title,'killsec',description,'','',link)
+            if not filename.startswith("killsec-"):
+                continue
 
-                ## killsec 3
+            html_doc = tmp_dir / filename
+            with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
+                soup = BeautifulSoup(f, "html.parser")
 
+            # If you still want to resolve the site root/slug later:
+            try:
+                address = find_slug_by_md5("killsec", extract_md5_from_filename(str(html_doc)))
+            except Exception:
+                address = ""
 
-                
-                # Extract data from <a> tags
-                
-                bp = soup.find('bp')
-                if bp:
-                    side = bp.find('side')
-                    if side:
-                        ls = side.find('ls')
-                        if ls:
-                            for a in ls.find_all('a'):
-                                href =  a['href']
-                                id = a['id']
-                                stat = a['stat']
-                                title_line = a['title']
-                                # disclosure_count = a.find('cont').text
-                                value = a.find('r').text.strip() if a.find('r') else None
-                                if '$' not in value:
-                                    value = 'N/A'
-                                country_img = a.find('img')['src'] if a.find('img') else None
-                                titles = [part.strip() for part in title_line.split('-')]
-                                appender(titles[0],'killsec',value, titles[1],'',address + '/posts.php' + href)
-                                
+            # New card layout:
+            # [header div] -> contains a flag <img src="/static/locales/XX.svg"> and a column with:
+            #   <span>Title</span>
+            #   <span>website.tld</span>
+            # Next sibling <div> -> description (small text block).
+            seen = set()
+
+            for img in soup.find_all("img", src=True):
+                if "/static/locales/" not in img["src"]:
+                    continue
+
+                header = img.find_parent("div")
+                if not header:
+                    continue
+
+                # Column holding Title + Website (two stacked spans)
+                info_col = header.find("div", class_=lambda c: c and "flex" in c and "flex-col" in c)
+                if not info_col:
+                    continue
+
+                spans = info_col.find_all("span")
+                if len(spans) < 2:
+                    continue
+
+                title = spans[0].get_text(strip=True)
+                website = spans[1].get_text(strip=True)
+
+                # Dedup in case multiple traversals hit the same card
+                key = (title, website)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                # Country code from the flag filename, e.g. '/static/locales/us.svg' -> 'US'
+                try:
+                    flag_src = img["src"]
+                    country = os.path.splitext(os.path.basename(flag_src))[0].upper()
+                except Exception:
+                    country = ""
+
+                # Description: first meaningful next-sibling <div> with text
+                description = ""
+                sib = header.find_next_sibling("div")
+                while sib and sib.name == "div":
+                    text = sib.get_text(" ", strip=True) or ""
+                    if text:
+                        description = text
+                        break
+                    sib = sib.find_next_sibling("div")
+
+                # No per-post URL or date visible on the cards (only a "Published" label)
+                published = ""
+                post_url = ""
+
+                appender(title, "killsec", description, website, published, post_url, country)
+
         except Exception as e:
-            errlog('killsec - parsing fail with error: ' + str(e) + 'in file:' + filename)
+            errlog("killsec - parsing fail with error: " + str(e) + " in file: " + filename)
 
-
-            

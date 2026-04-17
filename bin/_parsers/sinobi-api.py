@@ -1,77 +1,103 @@
 """
-    Upgraded API Parser for Sinobi
+    From Template v3 - 20240807
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |         |           |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="")
 """
 
-import os
-import json
+import os,datetime,sys,json
+#from bs4 import BeautifulSoup
+from datetime import datetime
 import requests
 import urllib3
+from urllib.parse import unquote
+from dotenv import load_dotenv 
 from pathlib import Path
-from dotenv import load_dotenv
-from urllib.parse import urljoin, unquote
-from datetime import datetime
-from shared_utils import appender, stdlog, errlog
+, stdlog
+
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-db_dir = home / os.getenv("DB_DIR", "db").strip("/")
-proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-target_group_name = "sinobi"
-api_endpoint_suffix = "api/v1/blog/get/announcements"
+db_dir = Path(home + os.getenv("DB_DIR"))
+
 
 # Disable the warning about certificate verification
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Dynamic proxy settings
+# Assuming Tor is running on default port 9050.
 proxies = {
-    'http': proxy_address.replace('socks5://', 'socks5h://'),
-    'https': proxy_address.replace('socks5://', 'socks5h://')
+    'http': 'socks5h://localhost:9050',
+    'https': 'socks5h://localhost:9050'
 }
+def get_fqdns_from_json(filename, group_name):
+    # Load the JSON data from the file
+    with open(filename, "r", encoding="utf-8", errors="ignore") as file:
+        data = json.load(file)
 
-def get_base_urls():
+    # Initialize a list to hold the FQDNs
+    fqdns = []
+
+    # Loop through each item in the JSON data (assuming top level is a list)
+    for item in data:
+        # Check if the group name matches
+        if item.get("name") == group_name:
+            # Loop through each location in the locations list
+            for location in item.get("locations", []):
+                # Append the FQDN to the list
+                fqdns.append(location["fqdn"])
+            break
+
+    return fqdns
+
+
+def fetch_json_from_onion_url(onion_url):
     try:
-        groups_file = db_dir / "groups.json"
-        if not groups_file.exists():
-            return []
-        with open(groups_file, 'r', encoding='utf-8') as file:
-            groups_data = json.load(file)
-        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-        if group and group.get('locations'):
-            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
-    except Exception as e:
-        errlog(f"Error reading groups.json: {e}")
-    return []
+        response = requests.get(onion_url, proxies=proxies,verify=False)
+        response.raise_for_status()  # Check for any HTTP errors
+    except requests.exceptions.RequestException as e:
+        print("Error:", e)
+        return None
+
+    # Assuming the response contains JSON data, parse it
+    json_data = response.json()
+    return json_data
+
+def convert_datetime(date_str):
+    # Parse the ISO 8601 formatted string to a datetime object
+    dt = datetime.fromtimestamp(date_str / 1000)
+    return dt.strftime('%Y-%m-%d %H:%M:%S.%f')
 
 def main():
-    base_urls = get_base_urls()
-    if not base_urls:
-        stdlog(f"No enabled locations found for {target_group_name} in DB.")
-        base_urls = ['http://sinobi6ftrg27d6g4sjdt65malds6cfptlnjyw52rskakqjda6uvb7yd.onion']
-
-    for base_url in base_urls:
-        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
-        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
-        
+    filename = db_dir / 'groups.json'
+    group_name = "sinobi"
+    fqdns = get_fqdns_from_json(filename, group_name)   
+    for fqdn in fqdns:
         try:
-            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
-            if response.status_code == 200:
-                json_data = response.json()
-                for item in json_data.get('payload', {}).get('announcements', []):
-                    victim = unquote(item.get('company', {}).get('company_name', 'Unknown'))
-                    description = unquote(item.get('description', [''])[0])
-                    published = datetime.fromtimestamp(item.get('createdAt', 0) / 1000).strftime('%Y-%m-%d %H:%M:%S.%f')
-                    post_url = urljoin(base_url + '/', f"leaks/{item.get('_id', '')}")
-                    appender(victim, target_group_name, description, "", published, post_url)
-                return
-            else:
-                errlog(f"API Error ({response.status_code}) for {full_api_url}")
+            #onion_url= 'http://sinobi6ftrg27d6g4sjdt65malds6cfptlnjyw52rskakqjda6uvb7yd.onion/api/v1/blog/get/announcements'
+            onion_url = 'http://' + fqdn + '/api/v1/blog/get/announcements'
+            #stdlog('Fetching :'+onion_url) 
+            json_data = fetch_json_from_onion_url(onion_url)
+            #stdlog(onion_url+" Fetched")
+            if json_data is not None:
+                for item in json_data['payload']['announcements']:
+                    id = item['_id']
+                    victim = unquote(item['company']['company_name'])
+                    country = item['company']['country']
+                    description = unquote(item['description'][0])
+                    date_created = convert_datetime(item['createdAt'])
+                    link = 'http://' + fqdn + '/leaks/' + str(id) 
+                    appender(victim,'sinobi',description,None,date_created,link)
         except Exception as e:
-            errlog(f"Sinobi API Error for {base_url}: {e}")
-
-if __name__ == "__main__":
-    main()
+           stdlog('Sinobi - parsing fail with error: ' + str(e) + 'with ' + fqdn)

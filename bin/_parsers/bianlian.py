@@ -8,20 +8,24 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os
-from urllib.parse import urljoin
-import sys
-import re
+import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 
 def main():
@@ -29,7 +33,7 @@ def main():
         try:
             if filename.startswith('bianlian-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 divs_name=soup.find_all('section', {"class": "list-item"})
                 for div in divs_name:
@@ -40,7 +44,7 @@ def main():
                         url = find_slug_by_md5('bianlian', extract_md5_from_filename(str(html_doc))) + str(post)
                     except:
                         #url = ''
-                        url = urljoin("bianlianlbc5an4kgnay3opdemgcryg2kpfcbgczopmm3dnbz3uaunad.onion", str(post))
+                        url = "bianlianlbc5an4kgnay3opdemgcryg2kpfcbgczopmm3dnbz3uaunad.onion" + str(post)
                     description = div.div.text.strip()
                     description = description.replace('%20',' ')
                     appender(title, 'bianlian', description,"","",url)

@@ -1,85 +1,77 @@
 """
-    Upgraded API Parser for Medusa
+    From Template v3 - 20240807
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |         |           |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="")
 """
 
-import os
-import json
+import os,datetime,sys,json
+#from bs4 import BeautifulSoup
+from datetime import datetime
 import requests
 import urllib3
+from urllib.parse import unquote
+from dotenv import load_dotenv 
 from pathlib import Path
-from dotenv import load_dotenv
-from urllib.parse import urljoin
-from datetime import datetime
-from shared_utils import appender, stdlog, errlog
+, stdlog, openjson
+
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-db_dir = home / os.getenv("DB_DIR", "db").strip("/")
-proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-target_group_name = "medusa"
-api_endpoint_suffix = "api/search?company=&page=0"
+db_dir = Path(home + os.getenv("DB_DIR"))
 
-# Disable the warning about certificate verification
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Dynamic proxy settings
+# Assuming Tor is running on default port 9050.
 proxies = {
-    'http': proxy_address.replace('socks5://', 'socks5h://'),
-    'https': proxy_address.replace('socks5://', 'socks5h://')
+    'http': 'socks5h://localhost:9050',
+    'https': 'socks5h://localhost:9050'
 }
 
-def get_base_urls():
+def fetch_json_from_onion_url(onion_url):
     try:
-        groups_file = db_dir / "groups.json"
-        if not groups_file.exists():
-            return []
-        with open(groups_file, 'r', encoding='utf-8') as file:
-            groups_data = json.load(file)
-        group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-        if group and group.get('locations'):
-            return [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
-    except Exception as e:
-        errlog(f"Error reading groups.json: {e}")
-    return []
+        response = requests.get(onion_url, proxies=proxies,verify=False, timeout=30)
+        response.raise_for_status()  # Check for any HTTP errors
+    except requests.exceptions.RequestException as e:
+        errlog(f"Error: " + str(e))
+        return None
+    # Parse and return the JSON data
+    try:
+        json_data = response.json()
+        return json_data
+    except ValueError as e:
+        errlog(f"Error parsing JSON: " + str(e))
+        return None
+
 
 def main():
-    base_urls = get_base_urls()
-    if not base_urls:
-        stdlog(f"No enabled locations found for {target_group_name} in DB.")
-        base_urls = ['http://cx5u7zxbvrfyoj6ughw76oa264ucuuizmmzypwum6ear7pct4yc723qd.onion']
+    json_onion_url= 'http://cx5u7zxbvrfyoj6ughw76oa264ucuuizmmzypwum6ear7pct4yc723qd.onion/api/search?company=&page=0'
+    site_onion_url= 'http://xfv4jzckytb4g3ckwemcny3ihv4i5p4lqzdpi624cxisu35my5fwi5qd.onion/detail?id='
 
-    for base_url in base_urls:
-        full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
-        stdlog(f"Fetching {target_group_name} API: {full_api_url}")
-        
-        try:
-            response = requests.get(full_api_url, proxies=proxies, verify=False, timeout=45)
-            if response.status_code == 200:
-                try:
-                    json_data = response.json()
-                except Exception as json_err:
-                    errlog(f"Medusa API response was not JSON for {full_api_url}. Content type: {response.headers.get('Content-Type')}")
-                    continue
-
-                for item in json_data.get('list', []):
-                    victim = item.get('company_name', 'Unknown')
-                    id = item.get('id', '')
-                    description = item.get('description', '')
-                    updated_date = item.get('updated_date', '') + '.000000' if item.get('updated_date') else ""
-                    post_url = urljoin(base_url + '/', f"detail?id={id}")
-                    extra_infos = { 'ransom': item.get('price_download', '') }
-                    
-                    appender(victim, target_group_name, description, '', updated_date, post_url, '', extra_infos)
-                return
-            else:
-                errlog(f"API Error ({response.status_code}) for {full_api_url}")
-        except Exception as e:
-            errlog(f"Medusa API Error for {base_url}: {e}")
-
-if __name__ == "__main__":
-    main()
+    # json_data = fetch_json_from_onduion_url(json_onion_url)
+    try:
+        json_data = openjson('/tmp/medusa.json')
+        if json_data is not None:
+            for item in json_data['list']:
+                victim = item['company_name']
+                id = item['id']
+                description = item['description']
+                updated_date = item['updated_date']+'.000000'
+                post_url = site_onion_url + id 
+                ransom = item['price_download']
+                extra_infos = { 'ransom': ransom }
+                appender(victim,'medusa',description,'',updated_date,post_url,'',extra_infos)
+    except Exception as e:
+           stdlog('Medusa - parsing fail with error: ' + str(e))
+    

@@ -1,16 +1,20 @@
-import os
-from urllib.parse import urljoin
-import sys
-import re
+import os, datetime, sys, re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import appender, errlog
 
-env_path = Path("../.env")
+
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     script_path = os.path.abspath(__file__)
@@ -37,7 +41,7 @@ def main():
 
                         victim = link_tag.text.strip() if link_tag else "N/A"
                         post_url = link_tag.get("href") if link_tag else "N/A"
-                        post_url = urljoin("http://twniiyed6mydtbe64i5mdl56nihl7atfaqtpww6gqyaiohgc75apzpad.onion", post_url)
+                        post_url = "http://twniiyed6mydtbe64i5mdl56nihl7atfaqtpww6gqyaiohgc75apzpad.onion" + post_url
 
                         published = time_tag.get("datetime") if time_tag else ""
                         if published:

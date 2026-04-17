@@ -1,58 +1,115 @@
-"""
-    Parser for Obscura
-"""
 
-import os
+import os, datetime, sys, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home + os.getenv("TMP_DIR", "/tmp/"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+
+def normalize_published(created_text: str) -> str:
+    """
+    Convert 'YYYY-MM-DD HH:MM' (optionally seconds) into 'YYYY-MM-DD 00:00:00.000000'.
+    Returns empty string if parsing fails.
+    """
+    if not created_text:
+        return ""
+    created_text = created_text.strip()
+    # Try known formats
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.datetime.strptime(created_text, fmt)
+            # Normalize to midnight with microseconds
+            normalized = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            return normalized.strftime("%Y-%m-%d %H:%M:%S.%f")
+        except Exception:
+            continue
+    return ""
+
+def extract_text(el) -> str:
+    return el.get_text(" ", strip=True) if el else ""
 
 def main():
-    # Covers both 'obscura' and 'obscura 2.0' file naming
-    group_patterns = ['obscura-', 'obscura 2.0-']
-    
+    # Determine group_name from script (supports symlink same as your base parser)
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace('.py','')
+    else:
+        group_name = os.path.basename(script_path).replace('.py','')
+
+    # Iterate all temp files that match the group prefix
     for filename in os.listdir(tmp_dir):
-        matched = False
-        for pattern in group_patterns:
-            if filename.startswith(pattern):
-                matched = True
-                break
-        
-        if matched:
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
+        try:
+            if filename.startswith(group_name + '-'):
+                html_doc = tmp_dir / filename
                 with open(html_doc, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'html.parser')
-                
-                cards = soup.find_all('div', class_='card')
-                for card in cards:
-                    try:
-                        header = card.find('div', class_='card-header')
-                        if not header: continue
+
+                    # Each victim card sits under: <div class="cards"><div class="card">...</div></div>
+                    cards = soup.select("div.cards > div.card")
+                    for card in cards:
+                        header = card.select_one(".card-header")
+                        desc = card.select_one(".card-desc")
+
+                        # Header spans
+                        title_el = header.select_one("span.title") if header else None
+                        domain_el = header.select_one("span.domain") if header else None
+                        industry_el = header.select_one("span.industry") if header else None
+                        size_el = header.select_one("span.size") if header else None
+                        created_el = header.select_one("span.created") if header else None
+                        status_el = header.select_one("span.status") if header else None
+
+                        title = extract_text(title_el)
+                        domain = extract_text(domain_el)
+                        description = extract_text(desc)
+                        created_raw = extract_text(created_el)
+
+                        # Map to your appender schema
+                        victim = title or domain or "N/A"
+                        website = domain or ""
+                        published = normalize_published(created_raw)
+                        post_url = ""  # No per-card link in provided HTML
+                        country = ""   # Not present in HTML
+
+                        # Optional: Skip non-victim announcement cards
+                        # e.g., if you want to exclude "New Obscura 2.0!" marketing posts
+                        # uncomment the next lines:
+                        # if not domain and "Obscura" in victim:
+                        #     continue
+
+                        appender(
+                            victim=victim,
+                            group_name=group_name,
+                            description=description,
+                            website=website,
+                            published=published,
+                            post_url=post_url,
+                            country=country
+                        )
+                    
+
+                        print('Victim:',victim)
+                        print('Description:',description)
+                        print('Published:',published)
+                        print('website:',website)
+                        print('*'*40)
                         
-                        victim = header.find('span', class_='title').text.strip()
-                        website = header.find('span', class_='domain').text.strip()
-                        published = header.find('span', class_='created').text.strip()
-                        
-                        desc_tag = card.find('div', class_='card-desc')
-                        description = desc_tag.text.strip() if desc_tag else ""
-                        
-                        # Post URL (if available, e.g. from Filelist button)
-                        link_tag = card.find('a', class_='filelist-btn', href=True)
-                        post_url = link_tag['href'] if link_tag else ""
-                        
-                        appender(victim, 'obscura', description, website, published, post_url)
-                    except Exception as e:
-                        errlog(f'obscura - error parsing card: {e}')
-            except Exception as e:
-                errlog(f'obscura - error reading file {filename}: {e}')
+
+        except Exception as e:
+            errlog(group_name + ' - parsing fail with error: ' + str(e) + ' in file: ' + filename)
 
 if __name__ == "__main__":
-    main()
+    main

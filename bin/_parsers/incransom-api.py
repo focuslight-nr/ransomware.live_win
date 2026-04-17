@@ -1,116 +1,61 @@
 """
-    Upgraded API Parser for INC Ransom - New
+    From Template v3 - 20240807
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |         |           |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="")
 """
 
-import os
-import json
-import requests
-import urllib3
-from pathlib import Path
-from dotenv import load_dotenv
-from urllib.parse import urljoin, unquote
+import os,datetime,sys,re
 from datetime import datetime
-from shared_utils import appender, stdlog, errlog
+from urllib.parse import unquote
+import requests
+import socks
+import json
+, stdlog
 
-# -------------------- CONFIG --------------------
-script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
-load_dotenv(dotenv_path=env_path)
-
-db_dir = home / os.getenv("DB_DIR", "db").strip("/")
-proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")
-
-# Group name as defined in groups.json
-target_group_name = "inc ransom - new"
-api_endpoint_suffix = "api/v1/blog/get/announcements?page=1&perPage=100"
-
-# Disable the warning about certificate verification
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Dynamic proxy settings
+# Assuming Tor is running on default port 9050.
 proxies = {
-    'http': proxy_address.replace('socks5://', 'socks5h://'),
-    'https': proxy_address.replace('socks5://', 'socks5h://')
+    'http': 'socks5h://localhost:9050',
+    'https': 'socks5h://localhost:9050'
 }
 
-def get_base_urls():
-    urls = ['http://incbacg6bfwtrlzwdbqc55gsfl763s3twdtwhp27dzuik6s6rwdcityd.onion']
+def fetch_json_from_onion_url(onion_url):
     try:
-        groups_file = db_dir / "groups.json"
-        if groups_file.exists():
-            with open(groups_file, 'r', encoding='utf-8') as file:
-                groups_data = json.load(file)
-            group = next((g for g in groups_data if g.get('name') == target_group_name), None)
-            if group and group.get('locations'):
-                db_urls = [loc.get('slug').rstrip('/') for loc in group['locations'] if loc.get('enabled', True)]
-                for u in db_urls:
-                    if u not in urls:
-                        urls.append(u)
-    except Exception as e:
-        errlog(f"Error reading groups.json: {e}")
-    return urls
+        response = requests.get(onion_url, proxies=proxies,verify=False)
+        response.raise_for_status()  # Check for any HTTP errors
+    except requests.exceptions.RequestException as e:
+        errlog(f"incransom - Error: {e}")
+        return None
+
+    # Assuming the response contains JSON data, parse it
+    json_data = response.json()
+    return json_data
+
 
 def main():
-    base_urls = get_base_urls()
+    json_onion_url = 'http://incbacg6bfwtrlzwdbqc55gsfl763s3twdtwhp27dzuik6s6rwdcityd.onion/api/v1/blog/get/announcements?page=1&perPage=400'
+    #json_onion_url= 'http://incbacg6bfwtrlzwdbqc55gsfl763s3twdtwhp27dzuik6s6rwdcityd.onion/api/v1/blog/get/announcements?page=1&perPage=15'
+    site_onion_url= 'http://incblog6qu4y4mm4zvw5nrmue6qbwtgjsxpw6b7ixzssu36tsajldoad.onion/blog/disclosures'
+
+
+    try:
+        json_data = fetch_json_from_onion_url(json_onion_url)
+        #json_data = openjson('/tmp/incransom.json')
+
+    except:
+        json_data = None
+        errlog('No Data in json')
+    if json_data is not None:
+        announcements = json_data['payload']['announcements']
+        for announcement in announcements:
+            company_id = announcement['_id']
+            company_name = unquote(announcement['company']['company_name'])
+            country = unquote(announcement['company']['country'])
+            description = unquote(" ".join(announcement['description']))
+            creation_date = datetime.fromtimestamp(announcement['leakAt'] / 1000).strftime('%Y-%m-%d %H:%M:%S.%f')
+            post_url=site_onion_url+'/'+company_id
+            appender(company_name,'incransom',description,'',creation_date,post_url,country)
     
-    # Initialize session for "browser etiquette"
-    session = requests.Session()
-    session.proxies = proxies
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    })
-
-    for base_url in base_urls:
-        try:
-            # 1. Visit top page to initialize session
-            stdlog(f"[{target_group_name}] Visiting top page: {base_url}")
-            session.get(base_url, verify=False, timeout=60)
-            
-            # 2. Fetch API
-            full_api_url = urljoin(base_url + '/', api_endpoint_suffix)
-            stdlog(f"[{target_group_name}] Fetching API: {full_api_url}")
-            
-            response = session.get(full_api_url, verify=False, timeout=120)
-            if response.status_code == 200:
-                json_data = response.json()
-                announcements = json_data.get('payload', {}).get('announcements', [])
-                
-                stdlog(f"[{target_group_name}] Found {len(announcements)} announcements")
-                
-                for ann in announcements:
-                    company = ann.get('company', {})
-                    company_name = unquote(company.get('company_name', 'Unknown')).strip()
-                    if not company_name: continue
-                    
-                    # Flatten description list and unquote
-                    desc_list = ann.get('description', [])
-                    description = unquote(" ".join(desc_list)).strip()
-                    
-                    # Convert leakAt (ms) to string
-                    published = ""
-                    leak_at = ann.get('leakAt', 0)
-                    if leak_at:
-                        published = datetime.fromtimestamp(leak_at / 1000).strftime('%Y-%m-%d %H:%M:%S.%f')
-                    
-                    post_id = ann.get('_id', '')
-                    post_url = urljoin(base_url + '/', f"blog/disclosures/{post_id}")
-                    country = unquote(company.get('country', '')).upper()
-                    
-                    appender(
-                        victim=company_name,
-                        group_name=target_group_name,
-                        description=description,
-                        published=published,
-                        post_url=post_url,
-                        country=country,
-                        website=company_name # The name often contains the domain
-                    )
-                return # Stop after first successful location
-            else:
-                errlog(f"[{target_group_name}] API Error ({response.status_code}) for {full_api_url}")
-        except Exception as e:
-            errlog(f"[{target_group_name}] Request failed for {base_url}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
-
-if __name__ == "__main__":
-    main()

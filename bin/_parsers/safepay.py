@@ -3,7 +3,7 @@
 
 """
 Parser for: Safepay Blog (cards grid)
-Extracts: victim/domain, description, website, post_url, country
+Extracts: victim/domain, description, website, published, post_url, country
 """
 
 import os, sys, re
@@ -20,10 +20,17 @@ from shared_utils import (
 )
 
 # ---------- Env ----------
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 FLAG_RE = re.compile(r"/(\d+x\d+)/([a-z]{2})\.png$", re.I)
 

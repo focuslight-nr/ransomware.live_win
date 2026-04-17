@@ -1,75 +1,98 @@
+#!/usr/bin/env python3
+# coding: utf-8
 """
-    Tengu Parser
-    From Template v4 - 202412827
+Parser TENGU Blog Leaks (grille de cartes) -> appender()
+Signature appender :
+    def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os, datetime, sys, re
+import os, re
 from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+
+def clean_text(s: str) -> str:
+    if not s:
+        return ""
+    return re.sub(r'\s+', ' ', s).strip()
 
 def main():
-    group_name = "tengu"
+    # Nom du groupe depuis le nom du script (compatible symlink)
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        original_path = os.path.abspath(original_path)
+        group_name = os.path.basename(original_path).replace('.py', '')
+    else:
+        group_name = os.path.basename(script_path).replace('.py', '')
 
     for filename in os.listdir(tmp_dir):
-        if filename.startswith(group_name + '-'):
-            html_doc = tmp_dir / filename
-            with open(html_doc, 'r', encoding='utf-8') as file:
-                soup = BeautifulSoup(file, "html.parser")
-                
-                # The HTML structure for Tengu
-                # <div class="post-card" onclick="window.location='/blog/...' ">
-                #   <div class="post-header">
-                #     <div class="post-title">Victim Name</div>
-                #   </div>
-                #   <div class="post-body">Description</div>
-                # </div>
-                
-                post_cards = soup.find_all('div', class_='post-card')
-                if post_cards:
-                    stdlog(f"Found {len(post_cards)} post cards for {group_name} in {filename}")
-                    
-                    # Try to get base URL if possible
-                    target_md5 = extract_md5_from_filename(filename)
-                    base_url = find_slug_by_md5(group_name, target_md5)
-                    if base_url:
-                        base_url = base_url.rstrip('/')
-                    else:
-                        base_url = ""
+        try:
+            if not filename.startswith(group_name + '-'):
+                continue
 
-                    for card in post_cards:
-                        try:
-                            title_tag = card.find('div', class_='post-title')
-                            title = title_tag.text.strip() if title_tag else ""
-                            
-                            description_tag = card.find('div', class_='post-body')
-                            description = description_tag.text.strip() if description_tag else ""
-                            
-                            # Extract link from onclick attribute
-                            # onclick="window.location='/blog/.../'"
-                            onclick = card.get('onclick', '')
-                            link_match = re.search(r"window\.location='(.*?)'", onclick)
-                            link = link_match.group(1) if link_match else ""
-                            
-                            if link.startswith('/') and base_url:
-                                full_link = base_url + link
-                            else:
-                                full_link = link
-                            
-                            if title:
-                                appender(title, group_name, description, '', '', full_link)
-                        except Exception as e:
-                            errlog(f"{group_name} - entry parse fail: {e} in file: {filename}")
-                else:
-                    # errlog(f"{group_name} - no items found in file: {filename}")
-                    pass
+            html_doc = tmp_dir / filename
+            with open(html_doc, 'r', encoding='utf-8') as f:
+                soup = BeautifulSoup(f, 'html.parser')
+
+            # Base URL pour résoudre les href relatifs (ex: "/blog/<slug>/")
+            try:
+                base_slug = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))
+                base_url = (base_slug or "").replace('/leaks', '')
+            except Exception:
+                base_url = ""
+
+            # Chaque carte <a class="card" href="..."> est une entrée
+            for card in soup.select('a.card[href]'):
+                title_el = card.select_one('h5')
+                desc_el  = card.select_one('p')
+
+                post_title = clean_text(title_el.get_text()) if title_el else ""
+                if not post_title:
+                    continue
+
+                description = clean_text(desc_el.get_text()) if desc_el else ""
+
+                href = card.get('href', '').strip()
+                post_url = urljoin(base_url, href) if href else ""
+
+                # Champs non fournis par cette page
+                website = ""
+                published = ""
+                country = ""
+                """
+                print('victim:',post_title)
+                print('desc:',description)
+                print('post_url:',post_url)
+                """
+                appender(
+                    post_title,
+                    group_name,
+                    description=description,
+                    website=website,
+                    published=published,
+                    post_url=post_url,
+                    country=country
+                )
+             
+        except Exception as e:
+            errlog(f"{group_name} - parsing fail with error: {e} in file: {filename}")
 
 if __name__ == "__main__":
     main()

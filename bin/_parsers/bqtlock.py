@@ -6,10 +6,17 @@ from datetime import datetime
 from shared_utils import appender, extract_md5_from_filename, find_slug_by_md5, errlog
 
 # Load environment
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     script_path = os.path.abspath(__file__)
@@ -67,7 +74,7 @@ def main():
                             "ransom": ransom.replace("Unpaid (", "").replace("unpaid (","").replace(" requested)", "" ) if ransom else "",
                         }
 
-                        # print(f"[+] {title} | {domain_text} | {discovered} | {post_url} | {extra_infos}")
+                        print(f"[+] {title} | {domain_text} | {post_url} | {extra_infos}")
                         
                         appender(
                             group_name=group_name,

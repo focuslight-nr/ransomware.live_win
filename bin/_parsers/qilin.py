@@ -9,17 +9,23 @@
 """
 
 import os,datetime,sys,re
-from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     # Define the date format to convert to
@@ -44,7 +50,7 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc=tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup = BeautifulSoup(file, "html.parser")
                 ##divs_name = soup.find_all('div', {"class": "col-lg-4 col-sm-6 mb-4"})
                 # Loop through each item box and extract the required information
@@ -78,12 +84,11 @@ def main():
                     
                     # Extract the post URL
                     post_url_tag = box.find("a", class_="learn_more")
-                    post_url = post_url_tag['href'].strip() if post_url_tag else ""
+                    post_url = post_url_tag['href'].strip() 
                     if post_url:
                         site = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))
-                        if not site:
-                            site = "http://ijzn3sicrcy7guixkzjkib4ukbiilwc3xhnmby4mcbccnsd7j2rekvqd.onion"
-                        post_url = urljoin(site + '/', post_url)
+                        site = "http://ijzn3sicrcy7guixkzjkib4ukbiilwc3xhnmby4mcbccnsd7j2rekvqd.onion"
+                        post_url = site + post_url
                     else:
                         post_url = ""
                     

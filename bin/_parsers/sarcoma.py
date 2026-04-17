@@ -1,72 +1,87 @@
-import os, datetime, sys, re
+"""
+    From Template v4 - 202412827
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |         |           |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
+"""
+
+import os,datetime,sys,re
 from bs4 import BeautifulSoup
+from datetime import datetime
+from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog
-from datetime import datetime
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
-project_root = script_dir.parent.parent
-env_path = project_root / ".env"
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", str(project_root))
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
+
 def main():
-    group_name = "sarcoma"
-    stdlog(f"Processing group: {group_name}")
+
+    # Define the date format to convert to
+    date_format = "%Y-%m-%d %H:%M:%S.%f"
+    
+    ## Get the ransomware group name from the script name 
+    script_path = os.path.abspath(__file__)
+    # If it's a symbolic link find the link source 
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        original_path = os.path.abspath(original_path)
+        original_name = os.path.basename(original_path)
+        group_name = original_name.replace('.py','')
+    # else get the script name 
+    else:
+        script_name = os.path.basename(script_path)
+        group_name = script_name.replace('.py','')
 
     for filename in os.listdir(tmp_dir):
-        if filename.startswith(group_name + '-'):
-            html_doc = tmp_dir / filename
-            stdlog(f"Parsing: {html_doc}")
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Victim cards
-                cards = soup.find_all('div', class_='sg-form')
-                if cards:
-                    stdlog(f"Found {len(cards)} entries for {group_name}")
-                    for card in cards:
-                        try:
-                            title_div = card.find('div', class_='card-title')
-                            if not title_div: continue
-                            victim = title_div.get_text(strip=True)
-                            
-                            if victim.lower() in ('contacts', 'about us', 'main'):
-                                continue
+        try:
+            if filename.startswith(group_name+'-'):
+                html_doc= tmp_dir / filename
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
+                soup=BeautifulSoup(file,'html.parser')
+                #divs=soup.find_all('div', {"class": "modal fade"})
+                divs = soup.find_all('div', class_='modal-content sg-form')
+                for div in divs:
+                    victim = div.find('h5').text.strip()
+                    if victim not in ('Contacts', 'About Us'):
+                        description = div.find('pre', {"class": "text-break mb-2"}).text.strip()
+                        
+                        # Find the parent element containing GEO, Leak size, Contains
+                        details = div.find_all('div')
+                        geo = 'N/A'
+                        leak_size = 'N/A'
+                        contains = 'N/A'
+                        
+                        for detail in details:
+                            if detail.text.startswith('GEO:'):
+                                geo = detail.text.split(':')[-1].strip()
+                            elif detail.text.startswith('Leak size:'):
+                                leak_size = detail.text.split(':')[-1].strip()
+                            elif detail.text.startswith('Contains:'):
+                                contains = detail.text.split(':')[-1].strip()
+                        
+                        description = description + "Geo: " + geo + " - Leak size: " + leak_size + " - Contains: " + contains  
 
-                            description = ""
-                            desc_div = card.find('div', class_='card-text')
-                            if desc_div:
-                                description = desc_div.get_text(strip=True)
-                            
-                            appender(victim, group_name, description)
-                        except Exception as e:
-                            errlog(f"{group_name} - card parse fail: {e}")
-                
-                # Also try modals
-                modals = soup.find_all('div', class_='modal-content')
-                for modal in modals:
-                    try:
-                        title_h5 = modal.find('h5')
-                        if not title_h5: continue
-                        victim = title_h5.get_text(strip=True)
-                        
-                        if victim.lower() in ('contacts', 'about us'):
-                            continue
-                            
-                        pre_desc = modal.find('pre', class_='text-break')
-                        description = pre_desc.get_text(strip=True) if pre_desc else ""
-                        
+                        # Print extracted information
+                        #print(f"Victim: {victim}")
+                        #print(f"Description: {description}")
+                        #print("-" * 40)  # Separator for readability
+
+
                         appender(victim, group_name, description)
-                    except:
-                        pass
-            except Exception as e:
-                errlog(f"{group_name} - error reading file {filename}: {e}")
-
-if __name__ == "__main__":
-    main()
+        except Exception as e:
+            errlog(group_name + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)

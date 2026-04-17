@@ -8,9 +8,7 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os
-from urllib.parse import urljoin
-import re
+import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
@@ -18,17 +16,24 @@ from pathlib import Path
 from dotenv import load_dotenv
 import pycountry
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
     for filename in os.listdir(tmp_dir):
         try:
            if filename.startswith('moneymessage-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup = BeautifulSoup(file, "html.parser")
 
                 # Find all <a> elements with the specified class
@@ -40,7 +45,7 @@ def main():
 
                 # Print the extracted information
                 for link, title in zip(links, titles):
-                    link = urljoin("http://blogvl7tjyjvsfthobttze52w36wwiz34hrfcmorgvdzb6hikucb7aqd.onion", link)
+                    link = "http://blogvl7tjyjvsfthobttze52w36wwiz34hrfcmorgvdzb6hikucb7aqd.onion"+link
                     linn = ""
                     appender(title, 'moneymessage', '','','',link)
 
@@ -52,7 +57,7 @@ def main():
 
                 # Print the extracted information
                 for link, title in zip(links, titles):
-                    link = urljoin("http://blogvl7tjyjvsfthobttze52w36wwiz34hrfcmorgvdzb6hikucb7aqd.onion", link)
+                    link = "http://blogvl7tjyjvsfthobttze52w36wwiz34hrfcmorgvdzb6hikucb7aqd.onion"+link
                     link = ""
                     appender(title, 'moneymessage', '','','',link)
                 file.close()

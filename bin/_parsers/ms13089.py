@@ -1,96 +1,125 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
-import sys
-import re
-import requests
-from datetime import datetime, timezone
+
+import os, datetime, re
 from bs4 import BeautifulSoup
+from pathlib import Path
+from dotenv import load_dotenv
+from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 
-# Add the parent directory of the current script's directory to the Python path
-# to ensure that shared_utils can be found
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared_utils import stdlog, errlog, appender
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
 
-# Group-specific details
-GROUP_NAME = "ms13-089"
-URL = "http://msleakjir7pxbe6onlqe5uwgvdmy6nq4mnwfy7ojswbhnleenm77vgad.onion"
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
-}
+
+
+def normalize_published(_: str) -> str:
+    """
+    MS13-089 pages do not expose a publication date.
+    Keep empty string to stay schema-compatible.
+    """
+    return ""
+
+
+def extract_post_url(el) -> str:
+    """
+    Extract URL from onclick="location.href='...'"
+    """
+    if not el:
+        return ""
+    onclick = el.get("onclick", "")
+    m = re.search(r"location\.href=['\"]([^'\"]+)['\"]", onclick)
+    return m.group(1) if m else ""
+
+def extract_text(el) -> str:
+    return el.get_text(" ", strip=True) if el else ""
+
+
+def extract_domain(text: str) -> str:
+    """
+    Extract first domain only
+    Example: 'uro.com (USA, Virginia)' -> 'uro.com'
+    """
+    if not text:
+        return ""
+    m = re.search(r"\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b", text)
+    return m.group(0) if m else ""
+
 
 def main():
-    stdlog(f"[{GROUP_NAME}] Starting parser")
-    
-    try:
-        # Fetch the main page
-        response = requests.get(URL, proxies=PROXIES, timeout=60)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        errlog(f"[{GROUP_NAME}] ❌ Error fetching page: {e}")
-        return
+    # Determine group_name from script name or symlink
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace(".py", "")
+    else:
+        group_name = os.path.basename(script_path).replace(".py", "")
 
-    # Parse the HTML
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Find all victim posts
-    victim_posts = soup.find_all('div', class_='post')
-    
-    if not victim_posts:
-        errlog(f"[{GROUP_NAME}] ❌ Could not find any victim posts.")
-        return
 
-    # Process each victim post
-    for post in victim_posts:
+    for filename in os.listdir(tmp_dir):
         try:
-            title_block = post.find('div', class_='post-title-block')
-            if not title_block:
+            if not filename.startswith(group_name + "-"):
                 continue
-            
-            title_div = title_block.find('div')
-            full_title = title_div.text.strip()
-            
-            # Extract victim name and country
-            victim_name = full_title
-            country = ''
-            match = re.search(r'\((.*?)\)', full_title)
-            if match:
-                victim_name = full_title[:match.start()].strip()
-                country_info = match.group(1).split(',')[0].strip()
-                country = country_info
 
-            description_tag = post.find('div', class_='post-text')
-            description = description_tag.text.strip() if description_tag else ''
+            html_doc = tmp_dir / filename
+            with open(html_doc, "r", encoding="utf-8") as f:
+                soup = BeautifulSoup(f, "html.parser")
 
-            post_url_tag = post.find('a', class_='post-more-link')
-            if post_url_tag and post_url_tag.get('onclick'):
-                onclick_attr = post_url_tag['onclick']
-                url_match = re.search(r"location\.href='(.*?)'", onclick_attr)
-                if url_match:
-                    post_url = URL + url_match.group(1)
-                else:
-                    post_url = URL
-            else:
-                post_url = URL
+                # Each victim card
+                posts = soup.select("div.post.bad")
+                for post in posts:
+                    title_el = post.select_one(".post-title-block > div")
+                    desc_el = post.select_one(".post-text")
 
-            # No publication date on the main page, use current time
-            published = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    title_text = extract_text(title_el)
+                    description = extract_text(desc_el)
 
-            appender(
-                victim=victim_name,
-                group_name=GROUP_NAME,
-                description=description,
-                published=published,
-                post_url=post_url,
-                country=country,
-                website=victim_name
-            )
+                    website = extract_domain(title_text)
+                    victim = website or title_text or "N/A"
+
+                    published = normalize_published("")
+                    more_el = post.select_one("a.post-more-link")
+                    post_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))  + extract_post_url(more_el)
+                    post_url = post_url.replace("cl/clicks.php?uri=","")
+                    country = ""
+
+                    # Optional: extract country if you want later
+                    # e.g. uro.com (USA, Virginia)
+                    # match = re.search(r"\(([^)]+)\)", title_text)
+                    # country = match.group(1) if match else ""
+                    
+                    appender(
+                        victim=victim,
+                        group_name=group_name,
+                        description=description,
+                        website=website,
+                        published=published,
+                        post_url=post_url,
+                        country=country
+                    )
+                    """
+                    print('victim:', victim)
+                    print('description:', description)
+                    print('website:', website)
+                    print('published:', published)
+                    print('post_url:', post_url)
+                    print('country:', country)
+                    print('---')
+                    """
         except Exception as e:
-            errlog(f"[{GROUP_NAME}] ❌ Error parsing a post: {e} - Post: {post.text.strip()}")
+            errlog(
+                f"{group_name} - parsing fail with error: {e} in file: {filename}"
+            )
 
-    stdlog(f"[{GROUP_NAME}] Parser finished.")
 
 if __name__ == "__main__":
     main()

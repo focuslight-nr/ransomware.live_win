@@ -1,59 +1,71 @@
 """
-    Parser for KRYBIT
+    From Template v4 - 202412827
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |    X    |           |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os, re
+import os, sys, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog, tmp_dir
-from datetime import datetime
-from urllib.parse import urljoin
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
+from pathlib import Path
+from dotenv import load_dotenv
 
 # -------------------- CONFIG --------------------
-base_url = "http://krybitqsdzwmhnitvwuhvsntfgf2wrhxveyxroxpc44c6gkft2cqldyd.onion"
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+
 
 def main():
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        original_path = os.path.abspath(original_path)
+        group_name = os.path.basename(original_path).replace('.py', '')
+    else:
+        group_name = os.path.basename(script_path).replace('.py', '')
+
     for filename in os.listdir(tmp_dir):
-        if filename.startswith('krybit-'):
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing krybit: {html_doc}')
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                cards = soup.find_all('div', class_='post-card')
-                for card in cards:
-                    try:
-                        title_tag = card.find('h3', class_='post-title')
-                        if not title_tag:
-                            continue
-                        victim = title_tag.text.strip()
-                        
-                        desc_tag = card.find('div', class_='post-excerpt')
-                        description = desc_tag.text.strip() if desc_tag else ""
-                        
-                        # Published date: use timer-display data-end as a placeholder for the leak date
-                        timer_tag = card.find('div', class_='timer-display')
-                        published = ""
-                        if timer_tag and timer_tag.get('data-end'):
-                            try:
-                                timestamp = int(timer_tag.get('data-end'))
-                                published = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S.%f")
-                            except:
-                                pass
+        try:
+            if filename.startswith(group_name + '-'):
+                html_doc = tmp_dir / filename
+                with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
+                    soup = BeautifulSoup(f, 'html.parser')
 
-                        # Extract link from onclick
-                        post_url = ""
-                        onclick = card.get('onclick')
-                        if onclick:
-                            match = re.search(r"window.location='(.*?)'", onclick)
-                            if match:
-                                post_url = urljoin(base_url, match.group(1))
+                base_url = find_slug_by_md5(group_name, extract_md5_from_filename(str(html_doc)))
 
-                        appender(victim, 'krybit', description, "", published, post_url)
-                    except Exception as e:
-                        errlog(f'krybit - error parsing card: {e}')
-            except Exception as e:
-                errlog(f'krybit - error reading file {filename}: {e}')
+                for post in soup.find_all('div', class_='post-card'):
+                    title_tag = post.find('h3', class_='post-title')
+                    if not title_tag:
+                        continue
+                    victim = title_tag.get_text(strip=True)
 
-if __name__ == "__main__":
-    main()
+                    excerpt_tag = post.find('div', class_='post-excerpt')
+                    description = excerpt_tag.get_text(strip=True) if excerpt_tag else ''
+
+                    post_url = ''
+                    onclick = post.get('onclick', '')
+                    match = re.search(r"window\.location='([^']+)'", onclick)
+                    if match:
+                        post_url = base_url + match.group(1)
+
+                    appender(victim, group_name, description, victim, '', post_url, '')
+                    #print('victim',victim)
+                    #print('DEsc.',description)
+                    #print('post_url:',post_url)
+
+        except Exception as e:
+            errlog(group_name + ' - parsing fail with error: ' + str(e) + ' in file: ' + filename)

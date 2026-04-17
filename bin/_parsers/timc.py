@@ -1,93 +1,83 @@
 """
-    Parser for TiMc group
-    +----------------------------------------------+
+    TiMc parser - "Pixel Dashboard" site
+    +-------------------------------------------+
     | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |    X    |     X     |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
+    +--------------------------+---------+---------+
+    |      X      |    X    |           |          |
+    +--------------------------+---------+---------+
+    Rappel : def appender(victim, group_name, description="", website="", published="", post_url="", country="", extra_infos=[])
 """
 
-import os, datetime, sys, re
+import os, re
 from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, tmp_dir
+from shared_utils import appender, extract_md5_from_filename, errlog
 from pathlib import Path
+from dotenv import load_dotenv
+
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
+    script_path = os.path.abspath(__file__)
+    group_name = os.path.basename(script_path).replace(".py", "")
+
     for filename in os.listdir(tmp_dir):
-        if filename.startswith('timc-'):
+        try:
+            if not filename.startswith(group_name + "-"):
+                continue
+
             html_doc = tmp_dir / filename
-            file_md5 = extract_md5_from_filename(filename)
-            base_url = find_slug_by_md5('timc', file_md5)
-            
-            with open(html_doc, 'r', encoding='utf-8') as file:
-                soup = BeautifulSoup(file, 'html.parser')
-                # Each victim card is in a div that contains an <a> with target="_blank"
-                # Looking at the pattern:
-                # <div ...>
-                #   <div ...>
-                #     <p class="... line-clamp-3">Description</p>
-                #     <button>EXPAND</button>
-                #   </div>
-                #   <a href="https://..." ...>...</a>
-                #   <div ...>
-                #     <div ...>
-                #        <span ...>DEADLINE: <span ...>2026-04-15 11:32:00</span></span>
-                #     </div>
-                #   </div>
-                # </div>
-                
-                # Let's find all external links first as they are good anchors for victim cards
-                external_links = soup.find_all('a', href=re.compile(r'^https?://'))
-                for link in external_links:
-                    victim = link.get_text().strip()
-                    if not victim:
-                        continue
-                    victim = victim.rstrip('/')
-                    website = victim
-                    
-                    description = ""
-                    published = ""
-                    
-                    # The description is usually in a <p> in a sibling div above the <a>
-                    container = link.find_parent('div', recursive=False) or link.parent
-                    
-                    # Search for description in surrounding elements
-                    # Based on HTML structure, it might be in a preceding div
-                    prev_div = link.find_previous_sibling('div')
-                    if prev_div:
-                        desc_p = prev_div.find('p', class_=re.compile(r'line-clamp'))
-                        if desc_p:
-                            description = desc_p.get_text().strip()
-                    
-                    # Search for deadline in succeeding elements
-                    next_div = link.find_next_sibling('div')
-                    if next_div:
-                        deadline_span = next_div.find('span', string=re.compile(r'DEADLINE:', re.I))
-                        if not deadline_span:
-                            # Search deeper
-                            deadline_span = next_div.find(lambda tag: tag.name == "span" and "DEADLINE:" in tag.get_text())
-                        
-                        if deadline_span:
-                            # The actual date is often in a nested span or the next span
-                            date_match = re.search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', next_div.get_text())
-                            if date_match:
-                                date_str = date_match.group(0)
-                                try:
-                                    published = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S.%f")
-                                except:
-                                    pass
+            with open(html_doc, "r", encoding="utf-8") as f:
+                soup = BeautifulSoup(f, "html.parser")
 
-                    appender(
-                        victim=victim,
-                        group_name='timc',
-                        description=description,
-                        website=website,
-                        published=published,
-                        post_url=base_url,
-                        country=""
-                    )
+            # Each victim is wrapped in div.pixel-border
+            cards = soup.find_all("div", class_=lambda c: c and "pixel-border" in c)
+            if not cards:
+                errlog(f"{group_name} - no cards found in file: {filename}")
+                continue
 
-if __name__ == "__main__":
-    main()
+            for card in cards:
+                # Victim name: span with text-phosphor (truncate flex-1)
+                name_span = card.find("span", class_=lambda c: c and "truncate" in c and "flex-1" in c)
+                victim = name_span.get_text(strip=True) if name_span else ""
+                if not victim:
+                    continue
+
+                # Description: paragraph inside the card body
+                desc_p = card.find("p", class_=lambda c: c and "font-[family-name:var(--font-terminal)]" in c)
+                description = ""
+                if desc_p:
+                    raw = desc_p.get_text(separator="\n", strip=True)
+                    # Strip leading ">" marker and "File preview: <url>" lines
+                    raw = re.sub(r"^\s*>\s*", "", raw).strip()
+                    description = re.sub(r"File preview:\s*https?://\S+\s*\n?", "", raw).strip()
+
+                # Website: anchor with href
+                website = ""
+                link = card.find("a", href=True)
+                if link:
+                    href = link.get("href", "").strip()
+                    if href.startswith("http"):
+                        website = href
+
+                appender(
+                    victim=victim,
+                    group_name=group_name,
+                    description=description,
+                    website=website,
+                    published="",
+                    post_url="",
+                    country=""
+                )
+
+        except Exception as e:
+            errlog(f"{group_name} - parsing fail with error: {e} in file: {filename}")

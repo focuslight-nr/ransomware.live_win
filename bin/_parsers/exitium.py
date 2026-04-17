@@ -8,77 +8,64 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os, datetime, sys, re
+import os, sys
+from urllib.parse import quote
 from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, tmp_dir
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
 from pathlib import Path
+from dotenv import load_dotenv
+
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+
 
 def main():
     for filename in os.listdir(tmp_dir):
         try:
             if filename.startswith('exitium-'):
                 html_doc = tmp_dir / filename
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Find the slug/base URL
-                group_name = 'exitium'
-                target_md5 = extract_md5_from_filename(filename)
-                base_url = find_slug_by_md5(group_name, target_md5)
-                if not base_url:
-                    base_url = "http://m3ksukzn2glzfdvlusohril7n3iyk4z4fudf6mm22lwhpbpt5aiee5qd.onion" # Fallback
+                file = open(html_doc, "r", encoding="utf-8", errors="ignore")
+                soup = BeautifulSoup(file, 'html.parser')
+                file.close()
 
-                target_cards = soup.find_all('div', class_='target-card')
-                for card in target_cards:
-                    # Name
-                    title_el = card.find('h3', class_='target-title')
-                    if not title_el:
+                # Only process published cards (skip pending/coming-soon cards)
+                cards = soup.find_all('div', class_='target-card clickable-card')
+                for card in cards:
+                    # Victim name
+                    victim = card.get('data-title', '').strip()
+                    if not victim:
                         continue
-                    name = title_el.text.strip()
-                    
-                    # Description
-                    text_el = card.find('p', class_='target-text')
-                    description = text_el.text.strip() if text_el else ""
-                    
-                    # Website estimation from description (zoominfo/pic)
-                    website = ""
-                    zoominfo_match = re.search(r'https://www\.zoominfo\.com/(?:c|pic)/([^/\s]+)', description)
-                    if zoominfo_match:
-                        website = zoominfo_match.group(1).replace('-', '.')
-                    
-                    # Published date
-                    published = ""
-                    # Check for countdown timer (pending)
-                    countdown = card.find('div', class_='time')
-                    if countdown and countdown.has_attr('data-publish-date'):
-                        pub_date_str = countdown['data-publish-date']
-                        try:
-                            # 2026-03-23T18:40:33.214861
-                            dt = datetime.fromisoformat(pub_date_str)
-                            published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-                        except:
-                            published = pub_date_str.replace('T', ' ')
-                    
-                    if not published:
-                        published = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-                    # Country/Industry heuristics from description
-                    # Use "Country : " format for shared_utils
-                    if "Brasil" in description:
-                        description = "Country : BR - " + description
-                    
+                    # Description
+                    description = card.get('data-text', '').strip()
+
+                    # Post URL - base URL from slug lookup with anchor to victim name
+                    anchor = quote(victim, safe='')
+                    post_url = find_slug_by_md5('exitium', extract_md5_from_filename(str(html_doc))) + '#' + anchor
+
                     appender(
-                        victim=name,
-                        group_name=group_name,
+                        victim=victim,
+                        group_name='exitium',
                         description=description,
-                        website=website,
-                        published=published,
-                        post_url=base_url, # No specific post URL found in overview
-                        country="" # Let appender handle it from description
+                        website='',
+                        published='',
+                        post_url=post_url,
+                        country=''
                     )
+                    '''
+                    print('Victim:', victim)
+                    print('Description:', description)
+                    print('Post URL:', post_url)
+                    print('---')
+                    '''
         except Exception as e:
             errlog('exitium - parsing fail with error: ' + str(e) + ' in file: ' + filename)
-
-if __name__ == "__main__":
-    main()

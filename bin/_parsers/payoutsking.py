@@ -1,17 +1,13 @@
-"""
-    Parser for Payouts King
-"""
-
-import os
+import os, sys, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog, find_slug_by_md5, extract_md5_from_filename
 from pathlib import Path
 from dotenv import load_dotenv
-from urllib.parse import urljoin
+from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from datetime import datetime
-import re
 
 # -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
@@ -20,92 +16,122 @@ load_dotenv(dotenv_path=env_path)
 home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-def main():
-    target_group = "payoutsking"
-    for filename in os.listdir(tmp_dir):
-        if filename.startswith("payoutsking-"):
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing {target_group}: {html_doc}')
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Get base URL to reconstruct links if possible
-                md5_val = extract_md5_from_filename(str(html_doc))
-                base_url = find_slug_by_md5(target_group, md5_val)
-                if base_url:
-                    base_url = base_url.rstrip('/')
 
-                # Find table body
-                table_body = soup.find('tbody', id='table')
-                if not table_body:
-                    # Alternative lookup by class or structure
-                    table_body = soup.find('tbody')
-                
-                if not table_body:
-                    errlog(f'{target_group} - table body not found')
+def main():
+    script_path = os.path.abspath(__file__)
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace('.py','')
+    else:
+        group_name = os.path.basename(script_path).replace('.py','')
+
+    for filename in os.listdir(tmp_dir):
+        try:
+            if filename.startswith(group_name + '-') and filename.endswith('.html'):
+                html_doc = tmp_dir / filename
+                with open(html_doc, 'r', encoding='utf-8') as file:
+                    soup = BeaugtifulSoup(file, 'html.parser')
+
+                # Find the main table by class (new structure)
+                table = soup.find('table', class_='_table_1462q_8')
+                if not table:
                     continue
 
-                # Process rows
-                rows = table_body.find_all('tr')
-                # The site uses rows for victims. Some might be expandable.
+                # Get all rows, skip header
+                rows = table.find('tbody').find_all('tr', recursive=False)
                 for row in rows:
+                    # Skip infoRow (details row)
+                    if 'infoRow' in row.get('class', []):
+                        continue
                     cells = row.find_all('td')
-                    if len(cells) < 2: continue
-                    
+                    if len(cells) < 10:
+                        continue
                     try:
-                        # Column 0: Company name (p tag with title class)
-                        title_p = row.find('p', class_=re.compile(r'_title_'))
-                        if not title_p:
-                            # Fallback to the first cell text
-                            victim = cells[0].get_text(strip=True)
-                        else:
-                            victim = title_p.get_text(strip=True)
-                        
-                        if not victim or victim.lower() == "company": continue
+                        # Company name (may be masked)
+                        company_cell = cells[0]
+                        company_p = company_cell.find('p', class_='_title_1462q_70')
+                        Company = company_p.text.strip() if company_p else company_cell.text.strip()
 
-                        # Column 1: Created date
-                        published = cells[1].get_text(strip=True)
-                        if published:
-                            try:
-                                # Format might be YYYY-MM-DD
-                                published_dt = datetime.strptime(published, '%Y-%m-%d')
-                                published = published_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-                            except:
-                                pass
+                        # Date (format: YYYY-MM-DD)
+                        Create_time_raw = cells[1].text.strip()
+                        try:
+                            Create_time = datetime.strptime(Create_time_raw, "%Y-%m-%d")
+                            Create_time_str = Create_time.strftime("%Y-%m-%d %H:%M:%S.000000")
+                        except Exception:
+                            Create_time_str = Create_time_raw
 
-                        # Column 2: Website
-                        website = ""
-                        if len(cells) > 2:
-                            website = cells[2].get_text(strip=True)
-                        
-                        # Column 3: Country
-                        country = ""
-                        if len(cells) > 3:
-                            country = cells[3].get_text(strip=True)
+                        # Website (may be <a> or text)
+                        website_cell = cells[2]
+                        website_a = website_cell.find('a')
+                        Website = website_a.text.strip() if website_a else website_cell.text.strip()
 
-                        # Description and link are sometimes in dynamic expandable areas
-                        description = ""
-                        post_url = ""
-                        
-                        # Check for a "data-description" or info sibling
-                        info_row = row.find_next_sibling('tr')
-                        if info_row and not info_row.find('td', recursive=False):
-                             # This might be an info block
-                             desc_el = info_row.find(class_=re.compile(r'_description_|_value_'))
-                             if desc_el:
-                                 description = desc_el.get_text(strip=True)
-                             
-                             link_el = info_row.find('a', href=True)
-                             if link_el:
-                                 post_url = urljoin(base_url, link_el['href']) if base_url else link_el['href']
+                        # Country
+                        Country = cells[3].text.strip()
+                        if Country == 'USA':
+                            Country = 'US'
 
-                        appender(victim, target_group, description, website, published, post_url, country)
+                        # Revenue
+                        Revenue = cells[4].text.strip()
+
+                        # Employees (may be masked)
+                        Employees = cells[5].text.strip()
+
+                        # Status/Type
+                        Status = cells[6].text.strip()
+
+                        # Data size
+                        Data = cells[7].text.strip()
+
+                        # Views (may be masked)
+                        Views = cells[8].text.strip()
+
+                        # Post URL (may be in details row, not in main row)
+                        Post_URL = ''
+                        # Try to find a link in the company cell (details link)
+                        link_tag = company_cell.find('a', class_='link')
+                        if link_tag and link_tag.has_attr('href'):
+                            Post_URL = link_tag['href']
+                        # If not, try to find in the details row (next sibling)
+                        next_row = row.find_next_sibling('tr')
+                        if next_row and 'infoRow' in next_row.get('class', []):
+                            info_link = next_row.find('a', class_='link')
+                            if info_link and info_link.has_attr('href'):
+                                Post_URL = info_link['href']
+
+                        extra_infos = {
+                            'data_size': Data,
+                            'employees': Employees,
+                            'status': Status,
+                            'views': Views
+                        }
+
+                        print(f"Victim: {Company}")
+                        print(f"  Website: {Website}")
+                        print(f"  Revenue: {Revenue}")
+                        print(f"  Country: {Country}")
+                        print(f"  Data Leaked: {Data}")
+                        print(f"  Employees: {Employees}")
+                        print(f"  Status: {Status}")
+                        print(f"  Views: {Views}")
+                        print(f"  Post URL: {Post_URL}")
+                        print(f"  Discovered: {Create_time_str}")
+                        print("-" * 80)
+
+                        appender(
+                            victim=Company,
+                            group_name=group_name,
+                            description='',
+                            website=Website,
+                            published=Create_time_str,
+                            post_url=Post_URL,
+                            country=Country,
+                            extra_infos=extra_infos
+                        )
                     except Exception as e:
-                        errlog(f'{target_group} - error parsing row: {e}')
-            except Exception as e:
-                errlog(f'{target_group} - error reading file {filename}: {e}')
-
-if __name__ == "__main__":
-    main()
-
+                        print(f"Error parsing row: {e}")
+                        continue
+        except Exception as e:
+            print(f"Error parsing file: {e}")
+            continue

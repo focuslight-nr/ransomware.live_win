@@ -2,13 +2,20 @@ import os
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
-from shared_utils import appender, errlog
+
 
 # Load environment
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def extract_text_from_block(block, label):
     """Extracts the value corresponding to a label in the same block."""

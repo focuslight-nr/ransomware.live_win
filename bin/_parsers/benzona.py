@@ -1,76 +1,132 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import os
-import sys
-import requests
-from datetime import datetime, timezone
+import os, datetime, sys, re
 from bs4 import BeautifulSoup
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Add the parent directory of the current script's directory to the Python path
-# to ensure that shared_utils can be found
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared_utils import stdlog, errlog, appender
 
-# Group-specific details
-GROUP_NAME = "benzona"
-URL = "http://benzona6x5ggng3hx52h4mak5sgx5vukrdlrrd3of54g2uppqog2joyd.onion"
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
 
-PROXIES = {
-    "http": "socks5h://127.0.0.1:9050",
-    "https": "socks5h://127.0.0.1:9050"
-}
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-def main():
-    stdlog(f"[{GROUP_NAME}] Starting parser")
-    
+
+# ----------------------------------------------------
+# Convert DD.MM.YYYY → YYYY-MM-DD 00:00:00.000000
+# BUT skip future dates
+# ----------------------------------------------------
+def convert_date(date_str):
     try:
-        # Fetch the main page
-        response = requests.get(URL, proxies=PROXIES, timeout=60)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        errlog(f"[{GROUP_NAME}] ❌ Error fetching page: {e}")
-        return
+        dt = datetime.datetime.strptime(date_str.strip(), "%d.%m.%Y")
+        now = datetime.datetime.now()
 
-    # Parse the HTML
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Find all victim cards
-    victim_cards = soup.find_all('div', class_='victim-card')
-    
-    if not victim_cards:
-        errlog(f"[{GROUP_NAME}] ❌ Could not find any victim cards.")
-        return
+        # ignore if in the future
+        if dt > now:
+            return ""
 
-    # Process each victim card
-    for card in victim_cards:
-        victim_name_tag = card.find('h3')
-        if not victim_name_tag:
-            continue
-        
-        victim_name = victim_name_tag.text.strip()
-        
-        # Gather details from <p> tags for the description
-        details = []
-        for p_tag in card.find_all('p'):
-            details.append(p_tag.text.strip())
-        description = ' | '.join(details)
+        return dt.strftime("%Y-%m-%d 00:00:00.000000")
+    except Exception:
+        return ""
 
-        # No individual post URL or publication date is available on the card
-        # Use the main URL and current time
-        post_url = URL
-        published = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+# ----------------------------------------------------
+# Convert "500gb" → "500 GB"
+# Convert "1tb"  → "1 TB"
+# ----------------------------------------------------
+def normalize_data_size(raw):
+    if not raw:
+        return ""
 
-        # Append the victim data
-        appender(
-            victim=victim_name,
-            group_name=GROUP_NAME,
-            description=description,
-            published=published,
-            post_url=post_url,
-            website=victim_name # Assume the h3 title is the website
-        )
+    s = raw.strip().lower().replace(" ", "")
 
-    stdlog(f"[{GROUP_NAME}] Parser finished.")
+    # match number + unit (gb/tb/mb)
+    m = re.match(r"(\d+)(gb|tb|mb)", s)
+    if not m:
+        return raw  # leave untouched if unknown format
+
+    number, unit = m.groups()
+    return f"{number} {unit.upper()}"
+
+
+# ----------------------------------------------------
+# MAIN PARSER
+# ----------------------------------------------------
+def main():
+    script_path = os.path.abspath(__file__)
+
+    # Determine group name via symlink or filename
+    if os.path.islink(script_path):
+        original_path = os.readlink(script_path)
+        if not os.path.isabs(original_path):
+            original_path = os.path.join(os.path.dirname(script_path), original_path)
+        group_name = os.path.basename(original_path).replace(".py", "")
+    else:
+        group_name = os.path.basename(script_path).replace(".py", "")
+
+    for filename in os.listdir(tmp_dir):
+
+        try:
+            if filename.startswith(group_name + "-"):
+                html_doc = tmp_dir / filename
+
+                with open(html_doc, "r", encoding="utf-8") as file:
+                    soup = BeautifulSoup(file, "html.parser")
+
+                # Victims inside: <div class="victim-card">
+                cards = soup.find_all("div", class_="victim-card")
+
+                for card in cards:
+
+                    # victim domain
+                    h3 = card.find("h3")
+                    victim = h3.text.strip() if h3 else "N/A"
+
+                    data_size = ""
+                    ransom = ""
+                    leak_date = ""
+
+                    for p in card.find_all("p"):
+                        text = p.get_text(strip=True)
+
+                        if text.startswith("Data:"):
+                            raw_ds = text.replace("Data:", "").strip()
+                            data_size = normalize_data_size(raw_ds)
+
+                        elif text.startswith("Ransom:"):
+                            ransom = text.replace("Ransom:", "").strip()
+
+                        elif text.startswith("Leak Date:"):
+                            raw_date = text.replace("Leak Date:", "").strip()
+                            leak_date = convert_date(raw_date)
+
+                    # -------------------------------
+                    # EXTRA INFOS (conditional ransom)
+                    # -------------------------------
+                    extra_infos = {
+                        "data_size": data_size
+                    }
+
+                    if ransom:  # only add ransom if not empty
+                        extra_infos["ransom"] = ransom
+
+                    appender(
+                        victim=victim,
+                        group_name=group_name,
+                        description="",
+                        website=victim,
+                        published=str(leak_date),
+                        post_url="",
+                        country="",
+                        extra_infos=extra_infos
+                    )
+
+        except Exception as e:
+            errlog(f"{group_name} parsing fail: {str(e)} in file {filename}")
+
 
 if __name__ == "__main__":
     main()

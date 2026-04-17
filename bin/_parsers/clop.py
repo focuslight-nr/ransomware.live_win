@@ -15,19 +15,26 @@ from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, e
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-tmp_dir = Path(home + os.getenv("TMP_DIR"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
-    pattern = r"^(FILES PART [1-9]|COMPANY's PART[1-9]|PART [1-9]|HOME|HOW TO DOWNLOAD\?|ARCHIVE|ARCHIVE[1-9]|ARCHIVE[10-99])$"
+    pattern = r"^(FILES PART [1-9]|COMPANY's PART[1-9]|COMPANIES-GROUP-[1-9]|PART [1-9]|HOME|HOW TO DOWNLOAD\?|ARCHIVE|ARCHIVE([1-9]|[1-9][0-9]))$"
 
     blacklist=['HOME', 'HOW TO DOWNLOAD?', 'ARCHIVE']
     for filename in os.listdir(tmp_dir):
         if filename.startswith('clop-'):
             html_doc= tmp_dir / filename
-            file=open(html_doc, 'r', encoding='utf-8')
+            file=open(html_doc, "r", encoding="utf-8", errors="ignore")
             soup=BeautifulSoup(file,'html.parser')
             ###divs_name=soup.find_all('span', {"class": "g-menu-item-title"})
             menu_items = soup.select(".g-menu-item")
@@ -36,10 +43,11 @@ def main():
                 ### for item in div.contents:
                 ###    victim = item.text.strip()
                 title_tag = item.select_one(".g-menu-item-title")
-                victim = title_tag.text.strip()
+                victim = title_tag.text.strip().replace(' - (EBS)','')
                 link_tag = item.select_one(".g-menu-item-container")
                 link = link_tag["href"].strip()
                 post_url = find_slug_by_md5('clop', extract_md5_from_filename(str(html_doc))) + str(link)
+                post_url = post_url.replace('.onion//','.onion/')
                 if not re.match(pattern, victim):
                     appender(victim, 'clop','','','',post_url)
                     

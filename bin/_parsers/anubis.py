@@ -11,11 +11,24 @@
 import os,datetime,sys,re
 from bs4 import BeautifulSoup
 from datetime import datetime
-from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog, stdlog, tmp_dir
-from urllib.parse import urljoin
+from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from pathlib import Path
+from dotenv import load_dotenv
+
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
+load_dotenv(dotenv_path=env_path)
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
+
     # Define the date format to convert to
     date_format = "%Y-%m-%d %H:%M:%S.%f"
     
@@ -38,47 +51,28 @@ def main():
         try:
             if filename.startswith(group_name+'-'):
                 html_doc= tmp_dir / filename
-                file=open(html_doc, 'r', encoding='utf-8')
+                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
-                # Find all victim containers directly
-                victim_items = soup.find_all("div", class_="col-sm-4 p-2")
-                if victim_items:
-                    stdlog(f"Found {len(victim_items)} items for {group_name}")
-                    # Get base URL
-                    md5_val = extract_md5_from_filename(str(html_doc))
-                    base_url = find_slug_by_md5(group_name, md5_val)
-                    if base_url:
-                        base_url = base_url.rstrip('/')
-
-                    for victim_div in victim_items:
-                        try:
-                            # Search within the inner div
-                            inner_div = victim_div.find("div", class_="bg-secondary-2") or victim_div.find("div", class_="bg-secondary")
-                            if not inner_div:
-                                inner_div = victim_div
-
-                            name_tag = inner_div.find("h5", class_="fw-bold mb-2")
-                            if not name_tag:
-                                continue
-                            victim = name_tag.get_text(strip=True)
-                            
-                            description = ""
-                            # The description is often the second h5 or has a specific style
-                            h5_tags = inner_div.find_all("h5", class_="fw-bold mb-2")
-                            if len(h5_tags) > 1:
-                                description = h5_tags[1].get_text(strip=True)
-                            
-                            link_tag = inner_div.find("a", class_=re.compile(r"btn.*"))
-                            post_url = ""
-                            if link_tag and link_tag.has_attr("href"):
-                                post_url = urljoin(base_url, link_tag["href"]) if base_url else link_tag["href"]
-                        
-                            appender(victim, group_name, description, "", "", post_url)
-                        except Exception as e:
-                            errlog(f'{group_name} - error parsing victim: {e}')
-                else:
-                    errlog(f"{group_name} - no items found in {filename}")
+                victims_div = soup.find("div", class_="row bg-secondary p-3 rounded-4 roboto")
+                for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):
+                    name_tag = victim_div.find("h5", class_="fw-bold mb-2")
+                    victim = name_tag.get_text(strip=True) if name_tag else ""
+                    description_tag = name_tag.find_next_sibling("h5") if name_tag else None
+                    description = description_tag.get_text(strip=True) if description_tag else "N/A"
+                    link_tag = victim_div.find("a", class_="btn btn-light fw-bold w-100")
+                    post_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else "N/A"
+                
+                    #appender(name, group_name, description,website,created_formatted,link)
+                    print(f'Victim: {victim}')
+                    appender(
+                        victim=victim,
+                        group_name=group_name,
+                        description=description,
+                        website='',  # Optional, leave empty or populate if relevant data exists
+                        published='',
+                        post_url=post_url,
+                        country=""  # Optional, leave empty or populate if relevant data exists
+                    )
                 file.close()
         except Exception as e:
             errlog(group_name + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)
-            

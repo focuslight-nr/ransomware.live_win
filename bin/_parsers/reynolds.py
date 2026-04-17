@@ -1,55 +1,86 @@
 """
-    Parser for Reynolds
+    From Template v4 - 202412827
+    +----------------------------------------------+
+    | Description | Website | published | post URL |
+    +-----------------------+-----------+----------+
+    |       X     |    X    |     X     |     X    |
+    +-----------------------+-----------+----------+
+    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os
+import os, sys, re
 from bs4 import BeautifulSoup
-from shared_utils import appender, stdlog, errlog
+from datetime import datetime
+from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path("../.env")
+# -------------------- CONFIG --------------------
+from shared_utils import appender, stdlog, errlog
+# Use robust path resolution for Windows/CLI consistency
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home + os.getenv("TMP_DIR", "/tmp/"))
+
+home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
 
 def main():
-    group_name = 'reynolds'
-    
     for filename in os.listdir(tmp_dir):
-        if filename.startswith(group_name + '-'):
-            html_doc = tmp_dir / filename
-            stdlog(f'Parsing: {html_doc}')
-            try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Reynolds uses section tags with post-item class
-                posts = soup.find_all('section', class_='post-item')
-                for post in posts:
-                    try:
-                        title_tag = post.find('h2', class_='post-title')
-                        if not title_tag: continue
-                        victim = title_tag.text.strip()
-                        
-                        desc_tag = post.find('div', class_='post-abstract')
-                        description = desc_tag.text.strip() if desc_tag else ""
-                        if description.startswith("about"):
-                            description = description[5:].strip()
-                        
-                        date_tag = post.find('div', class_='post-info')
-                        published = ""
-                        if date_tag:
-                            published = date_tag.text.strip()
-                        
-                        link_tag = post.find('a', href=True)
-                        post_url = link_tag['href'] if link_tag else ""
-                        
-                        appender(victim, group_name, description, "", published, post_url)
-                    except Exception as e:
-                        errlog(f'{group_name} - error parsing card: {e}')
-            except Exception as e:
-                errlog(f'{group_name} - error reading file {filename}: {e}')
+        try:
+            if filename.startswith('reynolds-'):
+                html_doc = tmp_dir / filename
+                file = open(html_doc, "r", encoding="utf-8", errors="ignore")
+                soup = BeautifulSoup(file, 'html.parser')
 
-if __name__ == "__main__":
-    main()
+                site_onion_url = find_slug_by_md5('reynolds', extract_md5_from_filename(str(html_doc)))
+
+                sections = soup.find_all('section', class_='post-item')
+                for section in sections:
+                    # Extract title (domain name used as victim name)
+                    title_tag = section.find('h2', class_='post-title')
+                    if not title_tag:
+                        continue
+                    title = title_tag.get_text(strip=True)
+                    if not title:
+                        continue
+
+                    # Extract post URL
+                    post_url = ''
+                    link = title_tag.find_parent('a', href=True)
+                    if link:
+                        post_url = link['href']
+
+                    # Website from title (title is the domain)
+                    website = ''
+                    if re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', title):
+                        website = 'https://' + title
+
+                    # Extract description
+                    description = ''
+                    abstract_div = section.find('div', class_='post-abstract')
+                    if abstract_div:
+                        p_tag = abstract_div.find('p')
+                        if p_tag:
+                            description = p_tag.get_text(strip=True).replace('\n', ' ')
+
+                    # Extract published date
+                    published = ''
+                    post_info = section.find('div', class_='post-info')
+                    if post_info:
+                        date_span = post_info.find('span')
+                        if date_span:
+                            date_text = date_span.get_text(strip=True)
+                            try:
+                                dt = datetime.strptime(date_text, '%Y-%m-%d')
+                                published = dt.strftime('%Y-%m-%d %H:%M:%S.%f')
+                            except ValueError:
+                                published = ''
+
+                    appender(title, 'reynolds', description, website, published, post_url)
+
+                file.close()
+        except:
+            errlog('reynolds : parsing fail')
