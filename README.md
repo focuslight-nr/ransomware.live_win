@@ -34,24 +34,124 @@ Ransomware.live_win handles **data collection, parsing, enrichment, and automati
 ransomware.live_win/
 │
 ├── bin/                  # Core Python scripts and libraries
-|   ├── _parsers/         # 140+ site-specific parsers
-│   ├── libcapture.py     # Capture victim/group screenshots
-│   ├── mass_capture.py   # Bulk screenshot capture for all victims
+│   ├── _parsers/         # 140+ site-specific parsers
+│   ├── _tools/           # Auxiliary tools and utility scripts
+│   ├── batch_add_groups.py # Batch add new ransomware groups from external source
+│   ├── check_tmp_errors.py # Identify connection failures in scraped files
 │   ├── export_to_excel.py # Export victims/groups data to Excel format
 │   ├── hudsonrockapi.py  # Hudson Rock API integration via Telegram bot
+│   ├── libcapture.py     # Core library for site screenshots
+│   ├── list_failures.py  # List groups that failed to scrape
+│   ├── list_scrape_success.py # List successfully scraped groups
+│   ├── manage.py         # Management CLI for victims and groups
+│   ├── mass_capture.py   # Bulk screenshot capture for all victims
 │   ├── parse.py          # Parse collected data into structured formats
+│   ├── rsslib.py         # RSS feed generation library
 │   ├── scrape.py         # Main scraping engine
-│   ├── manage.py         # Management CLI
-│   ├── shared_utils.py   # Shared helper functions
-│   ├── victims-browser.py# Victim data viewer (TUI)
+│   ├── shared_utils.py   # Shared helper functions and logging
 │   ├── status.py         # System health and process status
-│   └── requirements.txt  # Python dependencies
+│   └── victims-browser.py# Interactive terminal browser (TUI)
 │
 ├── db/                   # Local databases (JSON)
 ├── images/               # Screenshots and favicons
 ├── tmp/                  # Temporary working files
-└── .env.sample           # Example environment configuration
+├── .env.sample           # Example environment configuration
+├── requirements.txt      # Core dependencies
+└── requirements-windows.txt # Windows-specific dependencies
 ```
+
+---
+
+## 🚀 Usage Guide
+
+### 🕸️ Core Workflow
+
+1.  **Start Scraping**:
+    Downloads pages from ransomware leak sites to the `tmp/` directory. Uses Tor for `.onion` sites and supports AI-powered CAPTCHA solving.
+    ```bash
+    python bin/scrape.py [OPTIONS]
+    ```
+    **Available Options:**
+    - `-G, --group NAME`: Scrape only a specific group.
+    - `-B, --bypass`: Scrape all groups, even those marked as `enabled: false` in the database.
+    - `-F, --force`: Remove `scrape.lock` and start scraping immediately.
+    - `-V, --verbose`: Show detailed connection logs and scraping progress.
+
+2.  **Parse Collected Data**:
+    Processes files in `tmp/` using site-specific logic and updates the JSON databases.
+    ```bash
+    python bin/parse.py [OPTIONS]
+    ```
+    **Available Options:**
+    - `-G, --group NAME`: Run a specific parser (e.g., `python bin/parse.py -G lockbit`).
+    - `-F, --force`: Remove `parse.lock` and start parsing immediately.
+
+3.  **Browse Results (TUI)**:
+    Open an interactive terminal interface to view, filter, and edit victim data.
+    ```bash
+    python bin/victims-browser.py
+    ```
+
+### 🛠️ Management & Maintenance
+
+- **System Status & Cleanup**:
+    Check if the required directories exist and Tor is running. Use `--clean` to empty the `tmp/` directory.
+    ```bash
+    python bin/status.py [--clean]
+    ```
+
+- **Management CLI**:
+    Add, edit, or remove groups and victims via command line.
+    ```bash
+    python bin/manage.py [OPTIONS]
+    ```
+
+    **Available Options:**
+    - `-A, --add NAME LOCATION`: Add a new group or append a new URL to an existing group.
+      *Example:* `python bin/manage.py -A "lockbit" "http://lockbitapt2xf.onion"`
+    - `-U, --append NAME LOCATION`: Append a new URL to an **existing** group.
+    - `-B, --blur PATH`: Apply a Gaussian blur effect to a screenshot (original is saved with `-ORIG.png`).
+      *Example:* `python bin/manage.py -B images/victims/target.png`
+    - `-I, --infostealer DOMAIN`: Query Hudson Rock API for infostealer data related to a domain.
+      *Example:* `python bin/manage.py -I example.com`
+    - `-P, --purge`: Delete all cached `.html` files in the `tmp/` directory older than 24 hours.
+    - `-F, --force`: Forcefully remove the `scrape.lock` file if a previous scrape crashed.
+
+
+
+- **Export Data**:
+    Save victim and group data into `victims.xlsx` and `groups.xlsx`.
+    ```bash
+    python bin/export_to_excel.py
+    ```
+
+### 📸 Screenshot Capture
+
+- **Bulk Capture Victims**:
+    Automatically take screenshots of all victim pages.
+    ```bash
+    python bin/mass_capture.py
+    ```
+
+### 🔍 Diagnostics & Troubleshooting
+
+- **Check Scraping Errors**:
+    Identify groups that failed due to network errors (e.g., "Server Not Found").
+    ```bash
+    python bin/check_tmp_errors.py
+    ```
+
+- **List Successful Scrapes**:
+    List all groups that were successfully downloaded during the last run.
+    ```bash
+    python bin/list_scrape_success.py
+    ```
+
+- **List Scraping Failures**:
+    Identify groups that are currently failing to scrape.
+    ```bash
+    python bin/list_failures.py
+    ```
 
 ---
 
@@ -91,13 +191,54 @@ Edit `.env` and fill in your API keys and paths.
 
 ## ⚙️ Configuration
 
-Key variables in `.env`:
+Copy `.env.sample` to `.env` and fill in your API keys and paths.
 
-- `AI_PROVIDER`: Select `openai`, `gemini`, or `anthropic`.
-- `AI_CAPTCHA_SOLVING_ENABLED`: Set to `true` to enable AI-powered captcha bypass.
-- `TOR_AUTO_MANAGE`: Set to `true` to automatically manage the Tor process on Windows.
-- `TOR_BINARY_PATH`: Path to your `tor.exe`.
-- `SCRAPE_CONCURRENCY`: Set to `1` (safest) or higher for faster scraping.
+```bash
+cp .env.sample .env
+```
+
+### 📝 Detailed Environment Variables
+
+#### 🏠 Core Configuration
+- `RANSOMWARELIVE_HOME`: Root directory of the project (default: `.`).
+- `DB_DIR`: Directory where JSON databases are stored (default: `/db/`).
+- `IMAGES_DIR`: Directory for storing site favicons and images (default: `/images/`).
+- `TMP_DIR`: Directory for temporary HTML files during scraping (default: `/tmp/`).
+- `DATA_DIR`: Directory for additional data (default: `/data/`).
+- `TOR_PROXY_SERVER`: URL of the Tor proxy (default: `socks5://127.0.0.1:9050`).
+
+#### 🕷️ Scraping & Browsing
+- `SCRAPE_CONCURRENCY`: Number of simultaneous scraping tasks. Set to `1` for maximum reliability on Tor.
+- `PLAYWRIGHT_BROWSER`: Browser engine to use (`firefox`, `chromium`, or `webkit`). Firefox is generally most stable with Tor.
+
+#### 🤖 AI-Powered Features
+- `AI_PROVIDER`: Choose your primary AI backend (`openai`, `gemini`, or `anthropic`).
+- `AI_ENRICHMENT_ENABLED`: If `true`, uses AI to automatically categorize victims by sector and country.
+- `AI_CAPTCHA_SOLVING_ENABLED`: If `true`, uses AI Vision to solve image-based CAPTCHAs during scraping.
+
+**Provider Specifics:**
+- `OPENAI_API_KEY` / `OPENAI_MODEL`: API key and model (e.g., `gpt-4o`) for OpenAI.
+- `GEMINI_API_KEY` / `GEMINI_MODEL`: API key and model (e.g., `models/gemini-2.5-flash`) for Google Gemini.
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: API key and model (e.g., `claude-3-5-sonnet-20241022`) for Anthropic Claude.
+
+#### 📸 Screenshots & Watermarking
+- `AUTO_SCREENSHOT_VICTIMS`: Automatically capture a screenshot when a new victim is added.
+- `AUTO_SCREENSHOT_GROUPS`: Capture a screenshot of the leak site index during scraping.
+- `USE_WATERMARK`: Apply a watermark to captured screenshots.
+- `WATERMARK_IMAGE_PATH`: Path to the watermark image (relative to `RANSOMWARELIVE_HOME`).
+- `SCREENSHOT_DIR`: Path where screenshots are saved (default: `/images/screenshots/`).
+
+#### 🧅 Tor Management (Windows)
+- `TOR_AUTO_MANAGE`: If `true`, the script will start/stop Tor automatically.
+- `TOR_BINARY_PATH`: Absolute path to the Tor executable (e.g., `C:\tor\tor.exe`).
+- `TOR_PASSWORD`: Control port password for Tor (required for some advanced features).
+- `TOR_TORRC_PATH`: Optional path to a custom `torrc` configuration file.
+
+#### 🔔 Notifications
+- **Bluesky**: `BLUESKY_ENABLED`, `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD`.
+- **Pushover**: `PUSHOVER_ENABLED`, `PUSH_USER`, `PUSH_API`.
+- **NTFY**: `NTFY_ENABLED`, `NTFY_URL`, `NTFY_TOKEN`.
+- **Email**: `SMTP_SERVER`, `SMTP_PORT`, `EMAIL_FROM`, `EMAIL_TO`.
 
 ---
 
@@ -107,45 +248,6 @@ Thanks to recent updates, this tool now supports complex sites including:
 - **SPA/Modern Templates:** `securotrop`, `kairos`, `killsecurity3.0`, `linkc`, `genesis`, `termite`, `lockbit 3.0`, and `shinyhunters`.
 - **AI Captcha Bypass:** `thegentlemen` (math captchas solved via AI Vision).
 - **Advanced Scraping:** Logic to extract data from embedded JavaScript (`timelineData`) as seen in groups like `0apt`.
-
----
-
-## 🚀 Usage
-
-### Start Scraping
-```bash
-python bin/scrape.py
-```
-
-### Parse Collected Data
-```bash
-python bin/parse.py
-```
-
-### Interactive Victim Browser (TUI)
-Browse, filter, and edit victim data interactively:
-```bash
-python bin/victims-browser.py
-```
-
-### System Status & Cleanup
-```bash
-python bin/status.py --clean
-```
-
-### Scraping Status & Diagnostic Tools
-
-- **Identify Connection Failures (`check_tmp_errors.py`):**
-  Scans the `tmp/` directory for files containing network errors (e.g., "Server Not Found") and lists the affected groups along with their `.onion` URLs.
-  ```bash
-  python bin/check_tmp_errors.py
-  ```
-- **List Scrape Successes (`list_scrape_success.py`):**
-  Identifies successfully downloaded pages in `tmp/` and displays their site titles, helping you verify which groups are currently parseable.
-  ```bash
-  python bin/list_scrape_success.py
-  ```
-
 
 ---
 
