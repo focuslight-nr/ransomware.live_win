@@ -32,7 +32,7 @@ def main():
             if filename.startswith(group_name + '-') and filename.endswith('.html'):
                 html_doc = tmp_dir / filename
                 with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeaugtifulSoup(file, 'html.parser')
+                    soup = BeautifulSoup(file, 'html.parser')
 
                 # Find the main table by class (new structure)
                 table = soup.find('table', class_='_table_1462q_8')

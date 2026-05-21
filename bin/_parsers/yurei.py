@@ -26,8 +26,7 @@ import os, sys
 from pathlib import Path
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-
-, find_slug_by_md5, extract_md5_from_filename
+from shared_utils import appender, errlog, find_slug_by_md5, extract_md5_from_filename
 
 # ---------- ENV ----------
 env_path = Path("../.env")
