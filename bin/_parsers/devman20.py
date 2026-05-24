@@ -53,8 +53,9 @@ def main():
                     else:
                         desc = ""
 
-                    # Construct post URL using slug and sanitized victim name
-                    post_url = f"{post_base}#{re.sub(r'[^a-zA-Z0-9\-]', '', victim.lower().replace(' ', '-'))}"
+                    # Construct post URL using slug and sanitized victim name.
+                    fragment = re.sub(r"[^a-zA-Z0-9-]", "", victim.lower().replace(" ", "-"))
+                    post_url = f"{post_base}#{fragment}"
                     
                     appender(
                         victim=victim, 
