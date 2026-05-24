@@ -5,13 +5,15 @@ import os, re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
-, find_slug_by_md5, extract_md5_from_filename, stdlog
+from shared_utils import appender, errlog, find_slug_by_md5, extract_md5_from_filename, stdlog
 
-env_path = Path("../.env")
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home    = os.getenv("RANSOMWARELIVE_HOME", "")
-tmp_dir = Path(home + os.getenv("TMP_DIR", "./tmp"))
+home_env = Path(os.getenv("RANSOMWARELIVE_HOME", str(home)))
+tmp_dir = home_env / os.getenv("TMP_DIR", "tmp").strip("/")
 
 
 def normalize_desc(node) -> str:

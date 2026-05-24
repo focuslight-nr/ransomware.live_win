@@ -14,23 +14,22 @@ from datetime import datetime
 import requests
 import urllib3
 from urllib.parse import unquote
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 from pathlib import Path
-, stdlog, openjson
+from shared_utils import appender, stdlog, errlog, openjson
 
 
 # -------------------- CONFIG --------------------
-from shared_utils import appender, stdlog, errlog
 # Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+home_env = Path(os.getenv("RANSOMWARELIVE_HOME", str(home)))
+tmp_dir = home_env / os.getenv("TMP_DIR", "tmp").strip("/")
 
-db_dir = Path(home + os.getenv("DB_DIR"))
+db_dir = home_env / os.getenv("DB_DIR", "db").strip("/")
 
 
 # Assuming Tor is running on default port 9050.

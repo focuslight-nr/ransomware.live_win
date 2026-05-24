@@ -14,7 +14,7 @@ from urllib.parse import unquote
 import requests
 import socks
 import json
-, stdlog
+from shared_utils import appender, errlog, stdlog
 
 # Assuming Tor is running on default port 9050.
 proxies = {

@@ -111,15 +111,12 @@ def start_managed_tor():
                         try:
                             with socket.create_connection(("127.0.0.1", 9051)) as s:
                                 if TOR_PWD:
-                                    s.sendall(f"AUTHENTICATE "{TOR_PWD}"
-".encode())
+                                    s.sendall(f"AUTHENTICATE \"{TOR_PWD}\"\r\n".encode())
                                 else:
-                                    s.sendall(b"AUTHENTICATE
-")
+                                    s.sendall(b"AUTHENTICATE\r\n")
                                 s.recv(1024)
-                                
-                                s.sendall(b"GETINFO status/bootstrap-phase
-")
+
+                                s.sendall(b"GETINFO status/bootstrap-phase\r\n")
                                 response = s.recv(1024).decode()
                                 if "PROGRESS=100" in response:
                                     stdlog(f"Tor is fully bootstrapped and ready on SOCKS port {socks_port}")

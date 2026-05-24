@@ -53,7 +53,7 @@ for line in lines:
 
     # Sanitize name for command line
     sanitized_name = name.replace('"', '\"')
-    commands.append(f'python bin/manage.py --force --add "{sanitized_name}" "{url}"')
+    commands.append(f'python3 bin/manage.py --force --add "{sanitized_name}" "{url}"')
 
 # Remove duplicates for commands
 unique_commands = sorted(list(set(commands)))

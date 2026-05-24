@@ -89,15 +89,6 @@ async def query_telegram(client, domain_name, json_file_path, timer):
             if match:
                 figures[key] = int(match.group(1).replace(',', ''))
 
-        """
-        infostealer_section = re.search(r'\n🦠 Stealer Family Statistics:\n(.*?)\n\n', message, re.DOTALL)
-        if infostealer_section:
-            infostealer_pattern = re.findall(r'([A-Za-z ]+):\s(\d+)', infostealer_section.group(1))
-            figures['Infostealer Stats'] = {
-                name.strip(): int(count) for name, count in infostealer_pattern if name.strip().lower() != "total"
-            }
-        """
-
         infostealer_section = re.search(r'\n🦠 Stealer Family Statistics:\n(.*?)\n\n', message, re.DOTALL)
         if infostealer_section:
             infostealer_pattern = re.findall(r'([A-Za-z ]+):\s(\d+)', infostealer_section.group(1))

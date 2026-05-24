@@ -3,10 +3,9 @@ import pycountry
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
-, extract_md5_from_filename, find_slug_by_md5
+from shared_utils import appender, stdlog, errlog, extract_md5_from_filename, find_slug_by_md5
 
 # -------------------- CONFIG --------------------
-from shared_utils import appender, stdlog, errlog
 # Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent

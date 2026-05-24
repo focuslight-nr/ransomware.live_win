@@ -2,21 +2,20 @@ import os, datetime, sys, re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from dotenv import load_dotenv
-, extract_md5_from_filename, find_slug_by_md5
 import pycountry
 from rapidfuzz import process, fuzz
 from datetime import datetime
 
 # -------------------- CONFIG --------------------
-from shared_utils import appender, stdlog, errlog
+from shared_utils import appender, stdlog, errlog, extract_md5_from_filename, find_slug_by_md5
 # Use robust path resolution for Windows/CLI consistency
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent.parent
 env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+home_env = Path(os.getenv("RANSOMWARELIVE_HOME", str(home)))
+tmp_dir = home_env / os.getenv("TMP_DIR", "tmp").strip("/")
 
 
 

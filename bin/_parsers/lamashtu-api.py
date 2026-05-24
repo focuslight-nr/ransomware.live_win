@@ -12,12 +12,14 @@ import os, sys, json, requests
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
-, stdlog
+from shared_utils import appender, errlog, stdlog
 
-env_path = Path("../.env")
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
-home = os.getenv("RANSOMWARELIVE_HOME")
-db_dir = Path(home + os.getenv("DB_DIR"))
+home_env = Path(os.getenv("RANSOMWARELIVE_HOME", str(home)))
+db_dir = home_env / os.getenv("DB_DIR", "db").strip("/")
 
 proxies = {
     'http': 'socks5h://127.0.0.1:9050',

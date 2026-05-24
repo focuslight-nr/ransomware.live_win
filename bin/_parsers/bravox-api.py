@@ -12,9 +12,11 @@ import os, sys, requests
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-, stdlog
+from shared_utils import appender, errlog, stdlog
 
-env_path = Path("../.env")
+script_dir = Path(__file__).resolve().parent
+home = script_dir.parent.parent
+env_path = home / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # ── Config ────────────────────────────────────────────────────────────────────

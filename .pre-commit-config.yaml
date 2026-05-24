@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: compile-bin-python
+        name: Compile bin Python files
+        entry: python -m compileall -q bin
+        language: python
+        pass_filenames: false
+        files: ^bin/.*\.py$
