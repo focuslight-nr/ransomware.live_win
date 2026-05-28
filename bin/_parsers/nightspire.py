@@ -115,6 +115,33 @@ def main():
                     #print('*'*20)
                     
 
+                if not cards:
+                    for card in soup.select('.say-card'):
+                        title_tag = card.find('h3')
+                        text_tag = card.select_one('.text')
+                        if not title_tag or not text_tag:
+                            continue
+
+                        title_text = title_tag.get_text(" ", strip=True)
+                        description = text_tag.get_text(" ", strip=True)
+                        victim = ""
+
+                        warning = re.search(r'warning to\s+(?:the\s+)?(.+?)\s*(?:☠|$)', title_text, re.I)
+                        if warning:
+                            victim = warning.group(1).strip()
+
+                        if not victim:
+                            strong = text_tag.find('strong')
+                            if strong:
+                                candidate = strong.get_text(" ", strip=True)
+                                if len(candidate.split()) > 1 and candidate.lower() not in {"police", "fbi"}:
+                                    victim = candidate
+
+                        if not victim or victim.lower().startswith('nightspire'):
+                            continue
+
+                        appender(victim, 'nightspire', description, '', '', '', '')
+
                 file.close()
         except:
             errlog('nightspire : parsing fail')

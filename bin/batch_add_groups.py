@@ -3,6 +3,7 @@ import subprocess
 import os
 import requests
 import json
+import sys
 
 # URL for the markdown file
 markdown_url = "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/ransomware_gang.md"
@@ -52,11 +53,10 @@ for line in lines:
         continue
 
     # Sanitize name for command line
-    sanitized_name = name.replace('"', '\"')
-    commands.append(f'python3 bin/manage.py --force --add "{sanitized_name}" "{url}"')
+    commands.append((name, url))
 
 # Remove duplicates for commands
-unique_commands = sorted(list(set(commands)))
+unique_commands = sorted(set(commands))
 
 print(f"Found {len(unique_commands)} unique groups with ONLINE status to add.")
 print(f"Found {len(offline_urls)} URLs with OFFLINE status to potentially remove.")
@@ -91,10 +91,13 @@ if offline_urls:
 # --- Execute ONLINE commands ---
 print("Executing add commands...")
 for cmd in unique_commands:
-    print(f"Executing: {cmd}")
+    name, url = cmd
+    print(f"Executing: {sys.executable} bin/manage.py --force --add {name!r} {url!r}")
     try:
-        # Using os.system as it's simpler for this case
-        os.system(cmd)
+        subprocess.run(
+            [sys.executable, "bin/manage.py", "--force", "--add", name, url],
+            check=False,
+        )
     except Exception as e:
         print(f"Error executing command: {e}")
 
