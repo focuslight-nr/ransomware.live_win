@@ -69,35 +69,30 @@ def main():
             with open(html_doc, "r", encoding="utf-8", errors="ignore") as f:
                 soup = BeautifulSoup(f, "html.parser")
 
-            # Featured description (only appears once)
-            featured_desc = ""
-            featured = soup.select_one("article.company-row-featured")
-            if featured:
-                desc = featured.select_one(".company-row-desc")
-                if desc:
-                    featured_desc = desc.get_text(" ", strip=True)
-
-            # All company rows
-            rows = soup.select("article.company-row")
+            # Current layout: target rows in the dashboard table.
+            rows = soup.select(".target-row")
             for row in rows:
                 # Victim name
-                name_tag = row.select_one("h3.company-name")
-                victim = name_tag.get_text(strip=True) if name_tag else "N/A"
+                name_tag = row.select_one(".target-name")
+                victim = name_tag.get_text(" ", strip=True).replace("NEW", "").strip() if name_tag else ""
+                victim = re.sub(r"^[\s\-–—]+", "", victim).strip()
+                if not victim:
+                    continue
 
                 # Detail URL
-                link_tag = row.select_one(".company-row-actions a.btn-primary[href]")
+                link_tag = row.select_one(".target-actions a[href]")
                 post_url = _normalize_post_url(link_tag["href"]) if link_tag else ""
 
-                # Website (span or <a>)
                 website = ""
-                site_tag = row.select_one(".company-website")
-                if site_tag:
-                    website = site_tag.get_text(strip=True)
 
-                # Description
-                description = ""
-                if "company-row-featured" in row.get("class", []):
-                    description = featured_desc
+                industry = row.select_one(".target-industry")
+                revenue = row.select_one(".target-rev")
+                description_parts = []
+                if industry:
+                    description_parts.append(f"Industry: {industry.get_text(' ', strip=True)}")
+                if revenue:
+                    description_parts.append(f"Revenue: {revenue.get_text(' ', strip=True)}")
+                description = " | ".join(description_parts)
 
                 published = ""
                 

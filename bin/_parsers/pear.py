@@ -62,7 +62,7 @@ def get_country_code(location):
 
 def parse_card(card, group_name, html_doc):
     """Extract one victim from a 900px table card."""
-    left_td = card.select_one("td[style*='width:670px']")
+    left_td = card.select_one("td[style*='width:670px'], td[style*='width:650px'], td.es-text-7589")
     if not left_td:
         return None
 

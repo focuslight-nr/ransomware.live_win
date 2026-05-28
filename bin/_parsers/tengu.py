@@ -58,18 +58,22 @@ def main():
             except Exception:
                 base_url = ""
 
-            # Chaque carte <a class="card" href="..."> est une entrée
-            for card in soup.select('a.card[href]'):
-                title_el = card.select_one('h5')
-                desc_el  = card.select_one('p')
+            # Current Shisa layout.
+            for card in soup.select('.post-card'):
+                title_el = card.select_one('.post-title')
+                desc_el  = card.select_one('.post-body')
 
                 post_title = clean_text(title_el.get_text()) if title_el else ""
                 if not post_title:
                     continue
 
-                description = clean_text(desc_el.get_text()) if desc_el else ""
+                description = clean_text(desc_el.get_text(" ")) if desc_el else ""
 
-                href = card.get('href', '').strip()
+                href = ""
+                onclick = card.get('onclick', '')
+                m = re.search(r"window\\.location=['\"]([^'\"]+)['\"]", onclick)
+                if m:
+                    href = m.group(1)
                 post_url = urljoin(base_url, href) if href else ""
 
                 # Champs non fournis par cette page

@@ -8,7 +8,7 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="", extra_infos=[])
 """
 
-import os, sys, requests
+import os, requests
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -24,9 +24,6 @@ load_dotenv(dotenv_path=env_path)
 BASE_URL   = "http://bravoxxtrmqeeevhl7gdh2yzvlrjxajr66d33c7ozosrccx4cz7cepad.onion"
 API_BASE   = f"{BASE_URL}/scrapper-api"
 AUTH_TOKEN = os.getenv("BRAVOX_API_TOKEN")
-if not AUTH_TOKEN:
-    errlog(f"bravox : BRAVOX_API_TOKEN not set in .env")
-    sys.exit(1)
 PAGE_LIMIT = 100
 
 PROXIES = {
@@ -136,6 +133,10 @@ def parse_post(raw: dict) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    if not AUTH_TOKEN:
+        errlog(f"{GROUP} : BRAVOX_API_TOKEN not set in .env; skipping parser")
+        return
+
     session = requests.Session()
     session.proxies.update(PROXIES)
     session.headers.update({"Content-Type": "application/json"})

@@ -8,7 +8,7 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os, sys, json, requests
+import os, json, requests
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
@@ -36,12 +36,12 @@ def get_base_url() -> str:
     group = next((g for g in groups if g.get("name") == TARGET_GROUP), None)
     if not group:
         errlog(f"{TARGET_GROUP}: group not found in groups.json")
-        sys.exit(1)
+        return ""
     locations = group.get("locations", [])
     slug = locations[0].get("slug", "").rstrip("/") if locations else ""
     if not slug:
         errlog(f"{TARGET_GROUP}: no slug in locations")
-        sys.exit(1)
+        return ""
     return slug
 
 
@@ -71,6 +71,8 @@ def fetch_posts_page(base_url: str, page: int) -> dict:
 
 def main():
     base_url = get_base_url()
+    if not base_url:
+        return
 
     page = 1
     while True:
