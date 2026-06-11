@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ransomware.live GUI</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+:root {
+  --accent: #e05252;
+  --sidebar-w: 220px;
+}
+body { overflow-x: hidden; font-size: .9rem; }
+#sidebar {
+  width: var(--sidebar-w); min-height: 100vh;
+  background: #111; position: fixed; top:0; left:0; bottom:0;
+  display:flex; flex-direction:column; z-index:100;
+  border-right: 1px solid #2a2a2a;
+}
+#sidebar .brand {
+  padding: 1.2rem 1rem .8rem;
+  border-bottom: 1px solid #2a2a2a;
+}
+#sidebar .brand h6 { color: var(--accent); font-weight:700; letter-spacing:.05em; margin:0; }
+#sidebar .brand small { color:#666; }
+#sidebar .nav-link {
+  color:#aaa; border-radius:6px; margin:.15rem .5rem;
+  padding:.45rem .8rem; font-size:.85rem;
+}
+#sidebar .nav-link:hover, #sidebar .nav-link.active {
+  background:#1e1e1e; color:#fff;
+}
+#sidebar .nav-link i { margin-right:.5rem; font-size:1rem; vertical-align:-.1em; }
+#main { margin-left: var(--sidebar-w); padding:1.5rem; }
+.page { display:none; } .page.active { display:block; }
+.stat-card { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:1.2rem; }
+.stat-card .num { font-size:2rem; font-weight:700; }
+.table-sm td, .table-sm th { padding:.35rem .6rem; }
+.badge-group { background:#1f3a2a; color:#5fca8a; font-weight:500; }
+.log-box {
+  background:#0d0d0d; border:1px solid #2a2a2a; border-radius:6px;
+  font-family: monospace; font-size:.78rem; height:420px;
+  overflow-y:auto; padding:.8rem; white-space:pre-wrap; word-break:break-all;
+}
+.log-line-err { color:#f87171; }
+.log-line-ok  { color:#86efac; }
+.log-line-std { color:#d4d4d4; }
+.search-box { max-width: 320px; }
+.group-row { cursor:pointer; }
+.group-row:hover td { background:#1e1e1e; }
+#group-detail { display:none; }
+@media (min-width: 992px) {
+  #group-detail { position: sticky; top: 1.5rem; align-self: flex-start;
+    max-height: calc(100vh - 3rem); overflow-y: auto; }
+}
+.loc-badge {
+  display:inline-flex; align-items:center; gap:.3rem;
+  background:#1c2a1c; color:#6ee47b; border-radius:4px;
+  padding:.15rem .5rem; font-size:.78rem; margin:.15rem;
+}
+.loc-badge.disabled { background:#2a1c1c; color:#f87171; }
+.loc-badge .del-loc { cursor:pointer; color:#888; }
+.loc-badge .del-loc:hover { color:#f87171; }
+.victim-row td { vertical-align:middle; }
+.tag { font-size:.72rem; padding:.1rem .4rem; border-radius:3px; }
+#toast-container { position:fixed; bottom:1rem; right:1rem; z-index:9999; }
+.tooltip .tooltip-inner { max-width: 400px; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="brand">
+    <h6>ransomware.live_win</h6>
+    <small>OSINT GUI</small>
+  </div>
+  <nav class="nav flex-column mt-2 flex-grow-1">
+    <a class="nav-link active" href="#" data-page="dashboard"><i class="bi bi-grid-1x2"></i>Dashboard</a>
+    <a class="nav-link" href="#" data-page="groups"><i class="bi bi-people"></i>Groups</a>
+    <a class="nav-link" href="#" data-page="victims"><i class="bi bi-person-exclamation"></i>Victims</a>
+    <a class="nav-link" href="#" data-page="runner"><i class="bi bi-play-circle"></i>Run Scrape/Parse</a>
+  </nav>
+  <div style="padding:.8rem 1rem; color:#444; font-size:.72rem; border-top:1px solid #1e1e1e;">
+    ransomware.live GUI
+  </div>
+</div>
+
+<div id="main">
+
+<!-- DASHBOARD -->
+<div id="page-dashboard" class="page active">
+  <h5 class="mb-3"><i class="bi bi-grid-1x2 me-2"></i>Dashboard</h5>
+  <div class="row g-3 mb-4" id="stat-cards">
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="text-secondary mb-1">Groups</div><div class="num" id="s-groups">…</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="text-secondary mb-1">Active Groups</div><div class="num" id="s-active">…</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="text-secondary mb-1">Victims</div><div class="num" id="s-victims">…</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="text-secondary mb-1">Parsers</div><div class="num" id="s-parsers">…</div></div></div>
+  </div>
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="stat-card">
+        <div class="text-secondary mb-2">Top Groups by Victims</div>
+        <div id="chart-groups" style="max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="stat-card">
+        <div class="text-secondary mb-2">Top Countries</div>
+        <div id="chart-countries" style="max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="col-lg-3">
+      <div class="stat-card">
+        <div class="text-secondary mb-2">Sector Distribution</div>
+        <div id="chart-activity" style="max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="col-12">
+      <div class="stat-card">
+        <div class="text-secondary mb-2">Recently Discovered</div>
+        <div id="recent-victims"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GROUPS -->
+<div id="page-groups" class="page">
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <h5 class="mb-0"><i class="bi bi-people me-2"></i>Groups</h5>
+    <input id="group-search" type="text" class="form-control form-control-sm search-box ms-auto" placeholder="Search groups…">
+    <button class="btn btn-sm btn-outline-success" id="add-group-btn"><i class="bi bi-plus-lg"></i> New Group</button>
+  </div>
+
+  <!-- New Group modal -->
+  <div class="modal fade" id="new-group-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h6 class="modal-title">Add New Group</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small text-secondary mb-1">Group name (lowercase)</label>
+            <input type="text" class="form-control form-control-sm" id="ng-name" placeholder="e.g. lockbit">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small text-secondary mb-1">Initial URL</label>
+            <input type="text" class="form-control form-control-sm" id="ng-url" placeholder="http://example.onion">
+          </div>
+          <div>
+            <label class="form-label small text-secondary mb-1">Description (optional)</label>
+            <input type="text" class="form-control form-control-sm" id="ng-desc">
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-sm btn-success" id="ng-save">Create Group</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div id="groups-list-col" class="col-lg-5 col-xl-4">
+      <table class="table table-sm table-hover align-middle" id="groups-table">
+        <thead><tr><th>Name</th><th>Locations</th><th>Since</th></tr></thead>
+        <tbody id="groups-tbody"></tbody>
+      </table>
+    </div>
+    <div class="col-lg-7 col-xl-8" id="group-detail">
+      <div class="stat-card">
+        <div class="d-flex align-items-start justify-content-between mb-3">
+          <h6 id="gd-name" class="mb-0"></h6>
+          <button class="btn btn-sm btn-outline-secondary" id="gd-close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <!-- basic fields -->
+        <div class="row g-2 mb-3">
+          <div class="col-sm-6">
+            <label class="form-label text-secondary mb-1" style="font-size:.78rem;">Date added</label>
+            <input type="text" class="form-control form-control-sm" id="gd-date">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label text-secondary mb-1" style="font-size:.78rem;">Meta</label>
+            <input type="text" class="form-control form-control-sm" id="gd-meta" placeholder="null">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary mb-1" style="font-size:.78rem;">Description</label>
+            <textarea class="form-control form-control-sm" id="gd-description" rows="2"></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary mb-1" style="font-size:.78rem;">Contact</label>
+            <input type="text" class="form-control form-control-sm" id="gd-contact" placeholder="null">
+          </div>
+        </div>
+        <!-- locations -->
+        <div class="mb-2 text-secondary" style="font-size:.78rem;">Locations</div>
+        <div id="gd-locations" class="mb-2"></div>
+        <div class="input-group input-group-sm mb-3">
+          <input type="text" class="form-control" id="gd-new-url" placeholder="http://example.onion">
+          <select class="form-select" id="gd-new-type" style="max-width:90px;">
+            <option>DLS</option><option>Blog</option><option>Other</option>
+          </select>
+          <button class="btn btn-outline-success" id="gd-add-loc"><i class="bi bi-plus-lg"></i> Add</button>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-primary" id="gd-save"><i class="bi bi-floppy"></i> Save</button>
+          <button class="btn btn-sm btn-outline-info" id="gd-run-scrape"><i class="bi bi-cloud-download"></i> Scrape</button>
+          <button class="btn btn-sm btn-outline-warning" id="gd-run-parse"><i class="bi bi-cpu"></i> Parse</button>
+          <button class="btn btn-sm btn-outline-success" id="gd-run-both"><i class="bi bi-play-circle"></i> Scrape+Parse</button>
+          <button class="btn btn-sm btn-outline-danger ms-auto" id="gd-delete"><i class="bi bi-trash3"></i> Delete Group</button>
+        </div>
+        <div id="gd-save-msg" class="mt-2 text-success" style="font-size:.8rem;display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VICTIMS -->
+<div id="page-victims" class="page">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h5 class="mb-0"><i class="bi bi-person-exclamation me-2"></i>Victims</h5>
+    <input id="victim-search" type="text" class="form-control form-control-sm search-box" placeholder="Search…">
+    <select id="victim-group-filter" class="form-select form-select-sm" style="max-width:160px;"><option value="">All groups</option></select>
+    <select id="victim-country-filter" class="form-select form-select-sm" style="max-width:130px;"><option value="">All countries</option></select>
+    <select id="victim-activity-filter" class="form-select form-select-sm" style="max-width:160px;"><option value="">All sectors</option></select>
+    <button class="btn btn-sm btn-outline-secondary" id="victim-reset">Reset</button>
+    <a id="victim-export-csv" class="btn btn-sm btn-outline-secondary ms-auto" href="#"><i class="bi bi-download"></i> CSV</a>
+  </div>
+  <div id="victim-count" class="text-secondary mb-2" style="font-size:.8rem;"></div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle" id="victims-table">
+      <thead>
+        <tr>
+          <th style="cursor:pointer;" data-sort="post_title">Victim <i class="bi bi-arrow-down-up"></i></th>
+          <th style="cursor:pointer;" data-sort="group_name">Group <i class="bi bi-arrow-down-up"></i></th>
+          <th style="cursor:pointer;" data-sort="country">Country <i class="bi bi-arrow-down-up"></i></th>
+          <th style="cursor:pointer;" data-sort="activity">Sector <i class="bi bi-arrow-down-up"></i></th>
+          <th style="cursor:pointer;" data-sort="discovered">Discovered <i class="bi bi-arrow-down-up"></i></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="victims-tbody"></tbody>
+    </table>
+  </div>
+  <div class="d-flex align-items-center gap-3 mt-2">
+    <button class="btn btn-sm btn-outline-secondary" id="victims-prev"><i class="bi bi-chevron-left"></i></button>
+    <span id="victims-page-info" class="text-secondary" style="font-size:.8rem;"></span>
+    <button class="btn btn-sm btn-outline-secondary" id="victims-next"><i class="bi bi-chevron-right"></i></button>
+  </div>
+
+  <!-- edit modal -->
+  <div class="modal fade" id="victim-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h6 class="modal-title" id="vm-title"></h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><label class="form-label small text-secondary mb-1">Country</label>
+            <input type="text" class="form-control form-control-sm" id="vm-country"></div>
+          <div class="mb-2"><label class="form-label small text-secondary mb-1">Website</label>
+            <input type="text" class="form-control form-control-sm" id="vm-website"></div>
+          <div class="mb-2"><label class="form-label small text-secondary mb-1">Sector</label>
+            <select class="form-select form-select-sm" id="vm-activity">
+              <option>Manufacturing</option><option>Construction</option>
+              <option>Transportation/Logistics</option><option>Technology</option>
+              <option>Healthcare</option><option>Financial Services</option>
+              <option>Public Sector</option><option>Education</option>
+              <option>Business Services</option><option>Consumer Services</option>
+              <option>Energy</option><option>Telecommunication</option>
+              <option>Agriculture and Food Production</option>
+              <option>Hospitality and Tourism</option><option>Not Found</option>
+            </select></div>
+          <div><label class="form-label small text-secondary mb-1">Description</label>
+            <textarea class="form-control form-control-sm" id="vm-description" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-sm btn-primary" id="vm-save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RUNNER -->
+<div id="page-runner" class="page">
+  <h5 class="mb-3"><i class="bi bi-play-circle me-2"></i>Run Scrape / Parse</h5>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="stat-card">
+        <div class="mb-2"><label class="form-label small text-secondary">Group</label>
+          <select class="form-select form-select-sm" id="run-group"><option value="">-- select group --</option></select>
+        </div>
+        <div class="mb-3"><label class="form-label small text-secondary">Action</label>
+          <div class="d-flex gap-2">
+            <div class="form-check"><input class="form-check-input" type="radio" name="run-action" id="ra-scrape" value="scrape" checked>
+              <label class="form-check-label small" for="ra-scrape">Scrape</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="run-action" id="ra-parse" value="parse">
+              <label class="form-check-label small" for="ra-parse">Parse</label></div>
+          </div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="run-force">
+          <label class="form-check-label small" for="run-force">Force (remove stale lock)</label>
+        </div>
+        <button class="btn btn-sm btn-primary w-100" id="run-btn"><i class="bi bi-play-fill"></i> Run</button>
+      </div>
+
+      <div class="stat-card mt-3">
+        <div class="text-secondary mb-2" style="font-size:.78rem;">Recent jobs</div>
+        <div id="jobs-list"></div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <span class="text-secondary small">Output log</span>
+        <div class="d-flex gap-2">
+          <span id="run-status-badge"></span>
+          <button class="btn btn-sm btn-outline-secondary" id="run-clear"><i class="bi bi-trash3"></i></button>
+        </div>
+      </div>
+      <div class="log-box" id="log-box"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── utils ──────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
+  const r = await fetch(path, opts);
+  if (!r.ok) { const t = await r.text(); throw new Error(t || r.statusText); }
+  return r.json();
+}
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast align-items-center text-bg-${type} border-0 show mb-2`;
+  el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+  document.getElementById('toast-container').prepend(el);
+  setTimeout(() => el.remove(), 4000);
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function barChart(containerId, data, labelKey, valueKey, color='#e05252') {
+  const el = document.getElementById(containerId);
+  if (!data.length) { el.innerHTML='<span class="text-secondary small">No data</span>'; return; }
+  const max = Math.max(...data.map(d=>d[valueKey]));
+  el.innerHTML = data.map(d => {
+    const pct = Math.round(d[valueKey]/max*100);
+    return `<div class="d-flex align-items-center mb-1 gap-2" style="font-size:.78rem;">
+      <span style="width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ccc;" title="${esc(d[labelKey])}">${esc(d[labelKey])}</span>
+      <div style="flex:1;background:#222;border-radius:3px;height:12px;">
+        <div style="width:${pct}%;background:${color};height:12px;border-radius:3px;"></div></div>
+      <span style="width:35px;text-align:right;color:#888;">${d[valueKey]}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── navigation ─────────────────────────────────────────────────────────────
+const pages = {};
+document.querySelectorAll('[data-page]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const name = link.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
+    document.getElementById('page-'+name).classList.add('active');
+    link.classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'groups') loadGroups();
+    if (name === 'victims') loadVictims();
+    if (name === 'runner') loadRunnerGroups();
+  });
+});
+
+// ── DASHBOARD ──────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const [stats, parsers] = await Promise.all([api('GET','/api/stats'), api('GET','/api/parsers')]);
+  document.getElementById('s-groups').textContent = stats.total_groups;
+  document.getElementById('s-active').textContent = stats.active_groups;
+  document.getElementById('s-victims').textContent = stats.total_victims;
+  document.getElementById('s-parsers').textContent = parsers.length;
+
+  barChart('chart-groups', stats.top_groups, 'name', 'count', '#e05252');
+  barChart('chart-countries', stats.top_countries, 'country', 'count', '#5b8dee');
+  barChart('chart-activity', stats.activity_dist, 'activity', 'count', '#34c48c');
+
+  const rv = document.getElementById('recent-victims');
+  rv.innerHTML = `<table class="table table-sm mb-0"><thead><tr>
+    <th>Victim</th><th>Group</th><th>Country</th><th>Sector</th><th>Discovered</th>
+  </tr></thead><tbody>${stats.recent_victims.map(v=>`<tr>
+    <td>${esc(v.post_title)}</td>
+    <td><span class="badge badge-group">${esc(v.group_name)}</span></td>
+    <td>${esc(v.country||'')}</td>
+    <td><span class="tag bg-secondary text-white">${esc(v.activity||'')}</span></td>
+    <td style="font-size:.75rem;color:#888;">${esc((v.discovered||'').substring(0,16))}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+// ── GROUPS ─────────────────────────────────────────────────────────────────
+let _currentGroup = null;
+
+async function loadGroups(q='') {
+  const groups = await api('GET', '/api/groups?q='+encodeURIComponent(q));
+  const tbody = document.getElementById('groups-tbody');
+  tbody.innerHTML = groups.map(g => {
+    const locs = g.locations||[];
+    const avail = locs.filter(l=>l.available).length;
+    return `<tr class="group-row" data-name="${esc(g.name)}">
+      <td>${esc(g.name)}</td>
+      <td><span class="badge bg-secondary">${locs.length}</span>${avail?' <span class="badge bg-success">'+avail+' up</span>':''}</td>
+      <td style="font-size:.75rem;color:#777;">${esc(g.date||'')}</td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.group-row').forEach(row => {
+    row.addEventListener('click', () => openGroupDetail(row.dataset.name));
+  });
+}
+
+async function openGroupDetail(name) {
+  const g = await api('GET', '/api/groups/'+encodeURIComponent(name));
+  _currentGroup = g;
+  document.getElementById('gd-name').textContent = g.name;
+  document.getElementById('gd-date').value = g.date || '';
+  document.getElementById('gd-meta').value = g.meta || '';
+  document.getElementById('gd-description').value = g.description || '';
+  document.getElementById('gd-contact').value = g.contact || '';
+  renderLocations(g.locations || []);
+  const detail = document.getElementById('group-detail');
+  detail.style.display = 'block';
+  document.getElementById('gd-save-msg').style.display = 'none';
+  // on stacked (small screen) layouts scroll the panel into view
+  if (window.innerWidth < 992) {
+    detail.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+}
+
+function renderLocations(locs) {
+  const el = document.getElementById('gd-locations');
+  el.innerHTML = locs.map(loc => {
+    const enabled = loc.enabled !== false;
+    const avail = loc.available ? '<i class="bi bi-circle-fill text-success ms-1" style="font-size:.6rem;" title="Available"></i>' : '';
+    const lastScrape = loc.lastscrape ? `<span style="font-size:.68rem;color:#666;margin-left:.3rem;">${loc.lastscrape.substring(0,10)}</span>` : '';
+    return `<div class="loc-badge ${enabled?'':'disabled'} d-flex align-items-center gap-1 mb-1" style="max-width:100%;" title="${esc(loc.slug)}">
+      <i class="bi bi-${enabled?'wifi':'wifi-off'}"></i>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;">${esc(loc.slug)}</span>
+      <span style="font-size:.68rem;color:#888;white-space:nowrap;">${loc.type||'DLS'}</span>
+      ${avail}${lastScrape}
+      <button class="btn btn-sm py-0 px-1 toggle-loc" data-slug="${esc(loc.slug)}" title="${enabled?'Disable':'Enable'}" style="font-size:.7rem;border:none;background:none;color:${enabled?'#f9c74f':'#6ee47b'};">
+        <i class="bi bi-toggle-${enabled?'on':'off'}"></i>
+      </button>
+      <button class="btn btn-sm py-0 px-1 del-loc" data-slug="${esc(loc.slug)}" title="Remove" style="font-size:.7rem;border:none;background:none;color:#888;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.toggle-loc').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        const r = await api('PATCH', '/api/groups/'+encodeURIComponent(_currentGroup.name)+'/locations', {slug: btn.dataset.slug});
+        const g = await api('GET', '/api/groups/'+encodeURIComponent(_currentGroup.name));
+        _currentGroup = g;
+        renderLocations(g.locations||[]);
+        toast('Location '+(r.enabled?'enabled':'disabled'));
+      } catch(e) { toast(e.message,'danger'); }
+    });
+  });
+  el.querySelectorAll('.del-loc').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Remove location '+btn.dataset.slug+'?')) return;
+      try {
+        await api('DELETE', '/api/groups/'+encodeURIComponent(_currentGroup.name)+'/locations', {slug: btn.dataset.slug});
+        const g = await api('GET', '/api/groups/'+encodeURIComponent(_currentGroup.name));
+        _currentGroup = g;
+        renderLocations(g.locations||[]);
+        toast('Location removed');
+      } catch(e) { toast(e.message,'danger'); }
+    });
+  });
+}
+
+document.getElementById('gd-add-loc').addEventListener('click', async () => {
+  const url = document.getElementById('gd-new-url').value.trim();
+  const type = document.getElementById('gd-new-type').value;
+  if (!url) return;
+  try {
+    const r = await api('POST', '/api/groups/'+encodeURIComponent(_currentGroup.name)+'/locations', {slug:url, type});
+    const g = await api('GET', '/api/groups/'+encodeURIComponent(_currentGroup.name));
+    _currentGroup = g;
+    renderLocations(g.locations||[]);
+    document.getElementById('gd-new-url').value = '';
+    toast('Location added');
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+document.getElementById('gd-save').addEventListener('click', async () => {
+  try {
+    const body = {
+      date: document.getElementById('gd-date').value,
+      meta: document.getElementById('gd-meta').value || null,
+      description: document.getElementById('gd-description').value || null,
+      contact: document.getElementById('gd-contact').value || null,
+    };
+    const r = await api('PUT', '/api/groups/'+encodeURIComponent(_currentGroup.name), body);
+    const msg = document.getElementById('gd-save-msg');
+    msg.textContent = `Saved (backup: ${r.backup})`;
+    msg.style.display = '';
+    toast('Group saved');
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+document.getElementById('gd-close').addEventListener('click', () => {
+  document.getElementById('group-detail').style.display = 'none';
+});
+
+document.getElementById('gd-run-scrape').addEventListener('click', () => {
+  if (_currentGroup) runAction('scrape', _currentGroup.name);
+});
+document.getElementById('gd-run-parse').addEventListener('click', () => {
+  if (_currentGroup) runAction('parse', _currentGroup.name);
+});
+document.getElementById('gd-run-both').addEventListener('click', () => {
+  if (_currentGroup) runAction('scrape', _currentGroup.name, true);
+});
+document.getElementById('gd-delete').addEventListener('click', async () => {
+  if (!_currentGroup) return;
+  if (!confirm(`Delete group "${_currentGroup.name}"?\nThis cannot be undone.`)) return;
+  try {
+    await api('DELETE', '/api/groups/'+encodeURIComponent(_currentGroup.name));
+    document.getElementById('group-detail').style.display = 'none';
+    _currentGroup = null;
+    toast('Group deleted');
+    loadGroups(document.getElementById('group-search').value);
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+// ── New Group modal ────────────────────────────────────────────────────────
+let _newGroupModal;
+document.getElementById('add-group-btn').addEventListener('click', () => {
+  if (!_newGroupModal) _newGroupModal = new bootstrap.Modal(document.getElementById('new-group-modal'));
+  document.getElementById('ng-name').value = '';
+  document.getElementById('ng-url').value = '';
+  document.getElementById('ng-desc').value = '';
+  _newGroupModal.show();
+});
+document.getElementById('ng-save').addEventListener('click', async () => {
+  const name = document.getElementById('ng-name').value.trim().toLowerCase();
+  const url = document.getElementById('ng-url').value.trim();
+  const desc = document.getElementById('ng-desc').value.trim();
+  if (!name || !url) { toast('Name and URL are required','warning'); return; }
+  try {
+    await api('POST', '/api/groups', {name, slug: url, description: desc || null});
+    _newGroupModal.hide();
+    toast('Group "'+name+'" created');
+    loadGroups();
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+let _groupSearchTimer;
+document.getElementById('group-search').addEventListener('input', e => {
+  clearTimeout(_groupSearchTimer);
+  _groupSearchTimer = setTimeout(() => loadGroups(e.target.value), 300);
+});
+
+// ── VICTIMS ─────────────────────────────────────────────────────────────────
+let _vPage = 0, _vTotal = 0, _vLimit = 50;
+let _vSort = 'discovered', _vOrder = 'desc';
+let _vEditTarget = null;
+let _victimModal;
+
+async function loadVictims() {
+  if (!_victimModal) {
+    _victimModal = new bootstrap.Modal(document.getElementById('victim-modal'));
+    const [groups, facets] = await Promise.all([
+      api('GET', '/api/groups'),
+      api('GET', '/api/victims/facets'),
+    ]);
+    const gSel = document.getElementById('victim-group-filter');
+    groups.forEach(g => {
+      const o = document.createElement('option'); o.value=g.name; o.textContent=g.name; gSel.appendChild(o);
+    });
+    const cSel = document.getElementById('victim-country-filter');
+    facets.countries.forEach(c => {
+      const o = document.createElement('option'); o.value=c; o.textContent=c; cSel.appendChild(o);
+    });
+    const aSel = document.getElementById('victim-activity-filter');
+    facets.activities.forEach(a => {
+      const o = document.createElement('option'); o.value=a; o.textContent=a; aSel.appendChild(o);
+    });
+  }
+  await fetchVictims();
+}
+
+async function fetchVictims() {
+  const q = document.getElementById('victim-search').value;
+  const group = document.getElementById('victim-group-filter').value;
+  const country = document.getElementById('victim-country-filter').value;
+  const activity = document.getElementById('victim-activity-filter').value;
+  const params = new URLSearchParams({
+    q, group, country, activity,
+    sort: _vSort, order: _vOrder,
+    limit: _vLimit, offset: _vPage * _vLimit
+  });
+  const csvParams = new URLSearchParams({q, group, country, activity});
+  document.getElementById('victim-export-csv').href = '/api/victims/export.csv?'+csvParams;
+  const data = await api('GET', '/api/victims?'+params);
+  _vTotal = data.total;
+  const tbody = document.getElementById('victims-tbody');
+  tbody.innerHTML = data.victims.map(v => {
+    const desc = (v.description || '').trim();
+    const tip = desc
+      ? `data-bs-toggle="tooltip" data-bs-placement="right" data-bs-title="${esc(desc)}"`
+      : '';
+    return `<tr class="victim-row">
+    <td ${tip} style="cursor:${desc?'help':'default'};">${esc(v.post_title)}</td>
+    <td><span class="badge badge-group">${esc(v.group_name)}</span></td>
+    <td>${esc(v.country||'')}</td>
+    <td><span class="tag bg-secondary text-white">${esc(v.activity||'')}</span></td>
+    <td style="font-size:.75rem;color:#888;">${esc((v.discovered||'').substring(0,16))}</td>
+    <td class="d-flex gap-1">
+      <button class="btn btn-xs btn-sm btn-outline-secondary py-0 px-1 edit-victim"
+        data-title="${esc(v.post_title)}" data-group="${esc(v.group_name)}"
+        data-country="${esc(v.country||'')}" data-website="${esc(v.website||'')}"
+        data-activity="${esc(v.activity||'')}" data-desc="${esc(desc)}">
+        <i class="bi bi-pencil"></i></button>
+      <button class="btn btn-xs btn-sm btn-outline-secondary py-0 px-1 copy-url"
+        data-url="${esc(v.post_url||'')}"
+        ${!v.post_url ? 'disabled title="No post URL available"' : 'title="Copy post URL"'}>
+        <i class="bi bi-clipboard"></i></button>
+    </td>
+  </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+    el => new bootstrap.Tooltip(el, {trigger: 'hover', html: false})
+  );
+
+  tbody.querySelectorAll('.copy-url:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.url);
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-clipboard-check"></i>';
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        toast('URL copied', 'success');
+      } catch {
+        toast('Clipboard write failed', 'danger');
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.edit-victim').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _vEditTarget = {post_title: btn.dataset.title, group_name: btn.dataset.group};
+      document.getElementById('vm-title').textContent = btn.dataset.title + ' / ' + btn.dataset.group;
+      document.getElementById('vm-country').value = btn.dataset.country;
+      document.getElementById('vm-website').value = btn.dataset.website;
+      document.getElementById('vm-activity').value = btn.dataset.activity || 'Not Found';
+      document.getElementById('vm-description').value = btn.dataset.desc;
+      _victimModal.show();
+    });
+  });
+
+  document.getElementById('victim-count').textContent = `${_vTotal} victims`;
+  const pages = Math.ceil(_vTotal / _vLimit);
+  document.getElementById('victims-page-info').textContent = `Page ${_vPage+1} / ${pages}`;
+  document.getElementById('victims-prev').disabled = _vPage === 0;
+  document.getElementById('victims-next').disabled = (_vPage+1)*_vLimit >= _vTotal;
+}
+
+document.getElementById('vm-save').addEventListener('click', async () => {
+  try {
+    await api('PUT', '/api/victims/0', {
+      ..._vEditTarget,
+      country: document.getElementById('vm-country').value,
+      website: document.getElementById('vm-website').value,
+      activity: document.getElementById('vm-activity').value,
+      description: document.getElementById('vm-description').value,
+    });
+    _victimModal.hide();
+    toast('Victim saved');
+    fetchVictims();
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+document.getElementById('victims-prev').addEventListener('click', () => { _vPage--; fetchVictims(); });
+document.getElementById('victims-next').addEventListener('click', () => { _vPage++; fetchVictims(); });
+document.getElementById('victim-reset').addEventListener('click', () => {
+  document.getElementById('victim-search').value='';
+  document.getElementById('victim-group-filter').value='';
+  document.getElementById('victim-country-filter').value='';
+  document.getElementById('victim-activity-filter').value='';
+  _vPage=0; fetchVictims();
+});
+
+let _vSearchTimer;
+['victim-search','victim-group-filter','victim-country-filter','victim-activity-filter'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    clearTimeout(_vSearchTimer); _vPage=0;
+    _vSearchTimer = setTimeout(fetchVictims, 300);
+  });
+});
+
+document.querySelectorAll('#victims-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const s = th.dataset.sort;
+    if (_vSort === s) _vOrder = _vOrder==='asc'?'desc':'asc';
+    else { _vSort=s; _vOrder='desc'; }
+    _vPage=0; fetchVictims();
+  });
+});
+
+// ── RUNNER ─────────────────────────────────────────────────────────────────
+let _pollTimer = null;
+let _currentJob = null;
+let _logOffset = 0;
+let _runBothPending = null;
+
+async function loadRunnerGroups() {
+  const groups = await api('GET', '/api/groups');
+  const sel = document.getElementById('run-group');
+  if (sel.options.length <= 1) {
+    groups.forEach(g => {
+      const o = document.createElement('option'); o.value=g.name; o.textContent=g.name; sel.appendChild(o);
+    });
+  }
+  refreshJobs();
+}
+
+async function runAction(action, groupName, runBothAfter=false) {
+  // switch to runner page
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('[data-page]').forEach(l=>l.classList.remove('active'));
+  document.getElementById('page-runner').classList.add('active');
+  document.querySelector('[data-page="runner"]').classList.add('active');
+  await loadRunnerGroups();
+  document.getElementById('run-group').value = groupName;
+  document.querySelector(`input[name="run-action"][value="${action}"]`).checked = true;
+  if (runBothAfter) {
+    // flag to auto-run parse after scrape completes
+    _runBothPending = {group: groupName};
+  }
+  document.getElementById('run-btn').click();
+}
+
+document.getElementById('run-btn').addEventListener('click', async () => {
+  const group = document.getElementById('run-group').value;
+  const action = document.querySelector('input[name="run-action"]:checked').value;
+  const force = document.getElementById('run-force').checked;
+  if (!group) { toast('Select a group first','warning'); return; }
+  clearLog();
+  try {
+    const r = await api('POST', '/api/run', {action, group, force});
+    _currentJob = r.job_id;
+    _logOffset = 0;
+    startPolling();
+    refreshJobs();
+  } catch(e) { toast(e.message,'danger'); }
+});
+
+document.getElementById('run-clear').addEventListener('click', clearLog);
+
+function clearLog() {
+  document.getElementById('log-box').innerHTML='';
+  document.getElementById('run-status-badge').innerHTML='';
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer=null; }
+  _currentJob=null; _logOffset=0;
+}
+
+function startPolling() {
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(pollJob, 800);
+}
+
+async function pollJob() {
+  if (!_currentJob) return;
+  try {
+    const r = await api('GET', `/api/jobs/${_currentJob}?offset=${_logOffset}`);
+    appendLog(r.lines);
+    _logOffset += r.lines.length;
+    const badge = document.getElementById('run-status-badge');
+    if (r.status === 'done') {
+      badge.innerHTML = `<span class="badge ${r.returncode===0?'bg-success':'bg-danger'}">${r.returncode===0?'Done ✓':'Error '+r.returncode}</span>`;
+      clearInterval(_pollTimer); _pollTimer=null;
+      refreshJobs();
+      if (_runBothPending && r.returncode === 0) {
+        const pending = _runBothPending;
+        _runBothPending = null;
+        appendLog(['', '--- auto-starting parse ---']);
+        setTimeout(async () => {
+          clearLog();
+          try {
+            const res = await api('POST', '/api/run', {action:'parse', group: pending.group, force: false});
+            _currentJob = res.job_id; _logOffset = 0;
+            startPolling(); refreshJobs();
+          } catch(e) { appendLog(['[ERROR] '+e.message]); }
+        }, 600);
+      }
+    } else if (r.status === 'running') {
+      badge.innerHTML = '<span class="badge bg-warning text-dark">Running…</span>';
+    } else if (r.status === 'error') {
+      badge.innerHTML = '<span class="badge bg-danger">Error</span>';
+      clearInterval(_pollTimer); _pollTimer=null;
+    }
+  } catch(e) { /* ignore transient errors */ }
+}
+
+function appendLog(lines) {
+  const box = document.getElementById('log-box');
+  lines.forEach(line => {
+    const div = document.createElement('div');
+    const lo = line.toLowerCase();
+    div.className = 'log-line-' + (lo.includes('error')||lo.includes('traceback')||lo.includes('[!]') ? 'err'
+                    : lo.includes('success')||lo.includes('[+]')||lo.includes('✓') ? 'ok' : 'std');
+    div.textContent = line;
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+async function refreshJobs() {
+  const jobs = await api('GET', '/api/jobs');
+  const el = document.getElementById('jobs-list');
+  if (!jobs.length) { el.innerHTML='<span class="text-secondary small">No jobs yet</span>'; return; }
+  el.innerHTML = jobs.slice(-10).reverse().map(j => {
+    const icon = j.status==='done'?(j.returncode===0?'✓':'✗'):j.status==='running'?'⟳':'?';
+    const cls  = j.status==='done'?(j.returncode===0?'text-success':'text-danger'):j.status==='running'?'text-warning':'text-secondary';
+    return `<div class="d-flex align-items-center gap-2 py-1" style="font-size:.78rem;border-bottom:1px solid #1e1e1e;cursor:pointer;" data-jid="${j.job_id}">
+      <span class="${cls}">${icon}</span>
+      <span class="text-secondary">${j.job_id.substring(j.job_id.length-6)}</span>
+      <span class="${cls}">${j.status}</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-jid]').forEach(row => {
+    row.addEventListener('click', async () => {
+      clearLog();
+      _currentJob = row.dataset.jid;
+      _logOffset = 0;
+      const r = await api('GET', `/api/jobs/${_currentJob}?offset=0`);
+      appendLog(r.lines);
+      _logOffset = r.lines.length;
+      const badge = document.getElementById('run-status-badge');
+      if (r.status !== 'running') {
+        badge.innerHTML = `<span class="badge ${r.returncode===0?'bg-success':'bg-danger'}">${r.status} (${r.returncode})</span>`;
+      } else {
+        badge.innerHTML='<span class="badge bg-warning text-dark">Running…</span>';
+        startPolling();
+      }
+    });
+  });
+}
+
+// ── init ───────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>

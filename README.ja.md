@@ -253,6 +253,82 @@ cp .env.sample .env
 
 ---
 
+## 🖥️ GUI ツール
+
+JSON データベースの閲覧・編集、スクレイプ/パースジョブの実行、脅威インテリジェンスのダッシュボード表示が行えるローカル Web GUI です。ブラウザで操作します。
+
+### 機能一覧
+
+| タブ | できること |
+|------|-----------|
+| **Dashboard** | グループ数・被害者数・稼働グループ数などの統計、トップグループ/国/セクターのバーチャート、直近20件の被害者一覧 |
+| **Groups** | 256以上のグループを検索・一覧表示。行クリックで右パネルが開く |
+| **Groups – 編集** | date / meta / description / contact の編集、location URL の追加・削除・有効/無効切り替え。保存時にタイムスタンプ付き `.bak` バックアップを自動作成 |
+| **Victims** | 検索・グループ/国/セクターフィルタ・ソート・ページネーション。✏️ ボタンで country / website / sector / description を編集 |
+| **Run Scrape/Parse** | グループを選んで Scrape または Parse を実行。出力ログがリアルタイムにストリーミング表示。ジョブ履歴をサイドバーに保持 |
+
+### 前提条件
+
+`.venv` に既に `aiohttp` が含まれているため、追加パッケージのインストールは不要です。
+
+### 起動方法
+
+**macOS / Linux**
+```bash
+./start-gui.sh
+# オプション指定例:
+./start-gui.sh --port 8080 --no-browser
+```
+
+**Windows**
+```bat
+start-gui.bat
+:: オプション指定例:
+start-gui.bat --port 8080 --no-browser
+```
+
+**直接実行（共通）**
+```bash
+.venv/bin/python3 gui.py          # macOS/Linux
+.venv\Scripts\python.exe gui.py   # Windows
+```
+
+起動するとデフォルトブラウザで **http://localhost:8080** が自動で開きます。
+
+### コマンドラインオプション
+
+| フラグ | デフォルト | 説明 |
+|--------|-----------|------|
+| `--port N` | `8080` | 使用ポート番号 |
+| `--no-browser` | オフ | ブラウザを自動で開かない |
+| `--no-fallback` | オフ | ポートが使用中のとき自動切り替えをせず即エラー終了する |
+
+### ポート競合時の挙動
+
+指定ポートが使用中の場合、次の空きポート（最大 +10）に自動切り替えして以下のメッセージを表示します：
+
+```
+[WARN] Port 8080 is already in use — switching to port 8081.
+```
+
+スクリプト等で自動切り替えを禁止したい場合：
+
+```bash
+./start-gui.sh --no-fallback
+```
+
+手動でポートを解放する場合：
+
+```bash
+# macOS / Linux
+lsof -ti tcp:8080 | xargs kill
+
+# Windows (PowerShell)
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess | Stop-Process
+```
+
+---
+
 ## 📜 ライセンス
 
 このプロジェクトは **unlicense** ライセンスの下でライセンスされています。

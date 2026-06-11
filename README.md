@@ -251,6 +251,82 @@ Thanks to recent updates, this tool now supports complex sites including:
 
 ---
 
+## 🖥️ GUI Tool
+
+A local web-based GUI for browsing and managing the JSON databases, running scrape/parse jobs, and viewing threat intelligence dashboards.
+
+### Features
+
+| Tab | What you can do |
+|-----|----------------|
+| **Dashboard** | Overview stats, top groups by victim count, country & sector distribution, recently discovered victims |
+| **Groups** | Browse/search all 256+ groups; click any row to open the edit panel |
+| **Groups – edit** | Update date / meta / description / contact; add or remove locations (URLs); Save creates a timestamped `.bak` backup automatically |
+| **Victims** | Paginated searchable table; filter by group, country, sector; click ✏️ to edit country / website / sector / description |
+| **Run Scrape/Parse** | Pick a group, choose Scrape or Parse, click Run — live log streams in the output box; job history retained in sidebar |
+
+### Requirements
+
+`aiohttp` is already included in the `.venv`. No additional packages needed.
+
+### Launch
+
+**macOS / Linux**
+```bash
+./start-gui.sh
+# or with options:
+./start-gui.sh --port 8080 --no-browser
+```
+
+**Windows**
+```bat
+start-gui.bat
+:: or:
+start-gui.bat --port 8080 --no-browser
+```
+
+**Direct (any platform)**
+```bash
+.venv/bin/python3 gui.py          # macOS/Linux
+.venv\Scripts\python.exe gui.py   # Windows
+```
+
+The GUI opens at **http://localhost:8080** in your default browser.
+
+### CLI options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port N` | `8080` | Port to listen on |
+| `--no-browser` | off | Don't open the browser automatically |
+| `--no-fallback` | off | Exit with an error if the port is busy (instead of auto-switching) |
+
+### Port conflict behaviour
+
+If the requested port is already in use, the GUI automatically finds the next available port (up to +10) and prints a warning:
+
+```
+[WARN] Port 8080 is already in use — switching to port 8081.
+```
+
+To force a hard failure instead (useful in scripts):
+
+```bash
+./start-gui.sh --no-fallback
+```
+
+To manually free port 8080:
+
+```bash
+# macOS / Linux
+lsof -ti tcp:8080 | xargs kill
+
+# Windows (PowerShell)
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess | Stop-Process
+```
+
+---
+
 ## 📜 License
 
 This project is licensed under the **unlicense** License.
