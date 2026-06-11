@@ -243,9 +243,11 @@ async def api_victims_list(request: web.Request) -> web.Response:
 
 async def api_victims_facets(request: web.Request) -> web.Response:
     victims = _load_json(VICTIMS_FILE)
-    countries = sorted({v.get("country") or "" for v in victims if v.get("country")})
-    activities = sorted({v.get("activity") or "" for v in victims if v.get("activity")})
-    return web.json_response({"countries": countries, "activities": activities})
+    countries   = sorted({v.get("country")    or "" for v in victims if v.get("country")})
+    activities  = sorted({v.get("activity")   or "" for v in victims if v.get("activity")})
+    group_names = sorted({v.get("group_name") or "" for v in victims if v.get("group_name")})
+    return web.json_response({"countries": countries, "activities": activities,
+                              "group_names": group_names})
 
 
 async def api_victim_update(request: web.Request) -> web.Response:

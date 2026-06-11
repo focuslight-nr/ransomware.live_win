@@ -583,13 +583,10 @@ let _victimModal;
 async function loadVictims() {
   if (!_victimModal) {
     _victimModal = new bootstrap.Modal(document.getElementById('victim-modal'));
-    const [groups, facets] = await Promise.all([
-      api('GET', '/api/groups'),
-      api('GET', '/api/victims/facets'),
-    ]);
+    const facets = await api('GET', '/api/victims/facets');
     const gSel = document.getElementById('victim-group-filter');
-    groups.forEach(g => {
-      const o = document.createElement('option'); o.value=g.name; o.textContent=g.name; gSel.appendChild(o);
+    facets.group_names.forEach(name => {
+      const o = document.createElement('option'); o.value=name; o.textContent=name; gSel.appendChild(o);
     });
     const cSel = document.getElementById('victim-country-filter');
     facets.countries.forEach(c => {
