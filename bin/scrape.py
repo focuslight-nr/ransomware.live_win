@@ -628,8 +628,85 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                                 await asyncio.sleep(10) # wait for data to load
                             except Exception as ce:
                                 errlog(f"[{group_name}] Error during captcha solving: {ce}")
-                        
-                        content = await page.content()
+
+                        if group_name.lower() == "shadowbyt3$":
+                            for attempt in range(3):
+                                try:
+                                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+                                    equation_element = await page.query_selector(".equation")
+                                    captcha_input = await page.query_selector('input[name="captcha_ans"]')
+                                    submit_button = await page.query_selector('button[name="verify_gate"]')
+
+                                    if not equation_element or not captcha_input or not submit_button:
+                                        break
+
+                                    equation = (await equation_element.inner_text()).strip()
+                                    match = re.search(r"(\d+)\s*([+\-xX×*])\s*(\d+)", equation)
+                                    if not match:
+                                        break
+
+                                    left = int(match.group(1))
+                                    operator = match.group(2)
+                                    right = int(match.group(3))
+                                    if operator in {"x", "X", "×", "*"}:
+                                        answer = left * right
+                                    elif operator == "+":
+                                        answer = left + right
+                                    else:
+                                        answer = left - right
+
+                                    stdlog(f"[{group_name}] Solving math captcha: {equation}")
+                                    await captcha_input.fill(str(answer))
+                                    await submit_button.click()
+                                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+
+                                    leaks_link = page.locator('a[href="leaks"]').first
+                                    if await leaks_link.count() > 0:
+                                        stdlog(f"[{group_name}] Opening leaks page...")
+                                        await leaks_link.click()
+                                        await page.wait_for_load_state("domcontentloaded", timeout=30000)
+
+                                    try:
+                                        await page.wait_for_selector(
+                                            "h1:text-is('PUBLIC LEAKS')",
+                                            timeout=30000,
+                                        )
+                                    except Exception:
+                                        pass
+                                    break
+                                except Exception as ce:
+                                    if "context was destroyed" not in str(ce).lower():
+                                        errlog(f"[{group_name}] Error during captcha solving: {ce}")
+                                        break
+                                    stdlog(
+                                        f"[{group_name}] Page navigated before captcha handling; "
+                                        f"retrying ({attempt + 1}/3)..."
+                                    )
+                                    await asyncio.sleep(3)
+
+                        content = None
+                        content_error = None
+                        for attempt in range(3):
+                            try:
+                                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+                            except Exception:
+                                pass
+
+                            try:
+                                content = await page.content()
+                                break
+                            except Exception as e:
+                                content_error = e
+                                if "page is navigating" not in str(e).lower():
+                                    raise
+                                stdlog(
+                                    f"[{group_name}] Page is still navigating; "
+                                    f"retrying HTML capture ({attempt + 1}/3)..."
+                                )
+                                await asyncio.sleep(3)
+
+                        if content is None:
+                            raise content_error
                         title = await page.title()
                         if verbose:
                             stdlog(f"[{group_name}] Successfully got title for {slug}: {title}")

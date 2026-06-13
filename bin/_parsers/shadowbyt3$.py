@@ -8,12 +8,13 @@
     Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
 """
 
-import os, sys
+import os, re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from shared_utils import find_slug_by_md5, appender, extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
 
 # -------------------- CONFIG --------------------
 from shared_utils import appender, stdlog, errlog
@@ -53,6 +54,61 @@ def main():
                 file = open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup = BeautifulSoup(file, 'html.parser')
                 file.close()
+
+                base_url = find_slug_by_md5(
+                    group_name,
+                    extract_md5_from_filename(str(html_doc)),
+                ) or ""
+                post_url = urljoin(base_url.rstrip('/') + '/', 'leaks') if base_url else ""
+
+                cards = soup.select('.leak-card')
+                if cards:
+                    for card in cards:
+                        title_element = card.find('h3')
+                        if not title_element:
+                            continue
+
+                        title = title_element.get_text(" ", strip=True)
+                        phrase = card.select_one('.phrase')
+                        description = phrase.get_text("\n", strip=True) if phrase else ""
+                        if "not a leak just an announcement" in description.lower():
+                            continue
+
+                        website = ""
+                        website_match = re.search(
+                            r"Company Site:\s*(?:https?://)?([^\s/]+)",
+                            description,
+                            flags=re.IGNORECASE,
+                        )
+                        if website_match:
+                            website = website_match.group(1).strip().rstrip('.,)')
+                        else:
+                            title_domain = re.search(
+                                r"\((?:https?://)?([a-z0-9.-]+\.[a-z]{2,})\)?",
+                                title,
+                                flags=re.IGNORECASE,
+                            )
+                            if title_domain:
+                                website = title_domain.group(1).lower()
+
+                        size_match = re.search(
+                            r"\bsize:\s*([0-9.,]+\s*(?:KB|MB|GB|TB))",
+                            description,
+                            flags=re.IGNORECASE,
+                        )
+                        extra_infos = {}
+                        if size_match:
+                            extra_infos["data_size"] = size_match.group(1).replace(" ", "")
+
+                        appender(
+                            title,
+                            group_name,
+                            description=description,
+                            website=website,
+                            post_url=post_url,
+                            extra_infos=extra_infos,
+                        )
+                    continue
 
                 # Only process the leaks page (contains the PUBLIC LEAKS header)
                 if not soup.find('h1', string=lambda t: t and 'PUBLIC LEAKS' in t):
