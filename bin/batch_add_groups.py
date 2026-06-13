@@ -1,5 +1,4 @@
 import re
-import subprocess
 import os
 import requests
 import json
@@ -88,17 +87,54 @@ if offline_urls:
         except Exception as e:
             print(f"Error processing OFFLINE URLs: {e}")
 
-# --- Execute ONLINE commands ---
-print("Executing add commands...")
-for cmd in unique_commands:
-    name, url = cmd
-    print(f"Executing: {sys.executable} bin/manage.py --force --add {name!r} {url!r}")
-    try:
-        subprocess.run(
-            [sys.executable, "bin/manage.py", "--force", "--add", name, url],
-            check=False,
-        )
-    except Exception as e:
-        print(f"Error executing command: {e}")
+# --- Add ONLINE groups in-process (single read + single write) ---
+# Reuse manage.py's helpers but bypass the per-call subprocess launch and the
+# full read/write of groups.json that happened once per group. We load
+# groups.json once, mutate it in memory, and write it back a single time.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manage
+
+print("Adding ONLINE groups in-process...")
+
+# Honor the scrape lock exactly like manage.py does before touching groups.json
+lock_file_path = manage.home / 'tmp' / 'scrape.lock'
+manage.wait_for_lock(lock_file_path)
+
+groups = manage.openjson(manage.GROUPS_FILE)
+
+# Index existing groups by name so lookups are O(1) instead of a linear scan
+groups_by_name = {group['name']: group for group in groups}
+
+added_groups = 0
+added_locations = 0
+skipped_duplicates = 0
+
+for name, url in unique_commands:
+    # Match manage.py's normalization (lowercase name, strip surrounding quotes)
+    name = name.strip('"').lower()
+    url = url.strip('"')
+
+    group = groups_by_name.get(name)
+    if group is None:
+        new_group = manage.creategroup(name, url)
+        groups.append(new_group)
+        groups_by_name[name] = new_group
+        added_groups += 1
+        # Bluesky notification intentionally skipped for batch runs.
+    else:
+        existing_slugs = {loc['slug'] for loc in group['locations']}
+        if url not in existing_slugs:
+            group['locations'].append(manage.siteschema(url))
+            added_locations += 1
+        else:
+            skipped_duplicates += 1
+
+# Single write for the whole batch
+manage.write_to_file(groups, manage.GROUPS_FILE)
+print(
+    f"[✓] Added {added_groups} new group(s), "
+    f"{added_locations} new location(s), "
+    f"skipped {skipped_duplicates} duplicate(s)."
+)
 
 print("Batch add process complete.")
