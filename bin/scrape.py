@@ -836,8 +836,10 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
                     await scrape_group(context, group, bypass_enabled_flag, verbose)
                 except Exception as e:
                     errlog(f"Fatal error scraping group {group['name']}: {e}")
-                # Short pause between groups to let Tor circuits breathe
-                await asyncio.sleep(2)
+            # Short pause between groups to let Tor circuits breathe.
+            # Kept OUTSIDE the semaphore so the concurrency slot is released as
+            # soon as scraping finishes, instead of being held during the cooldown.
+            await asyncio.sleep(2)
 
         tasks = [sem_scrape(group, i) for i, group in enumerate(groups_to_scrape, start=1)]
         await asyncio.gather(*tasks)
