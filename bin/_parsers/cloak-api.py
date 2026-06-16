@@ -29,41 +29,36 @@ tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
 
 def main():
-            # URL of the JSON data
-            url = 'https://www.ransomlook.io/export/2'
-            
-            # Tor proxy configuration
-            proxies = {
-                    'http': 'socks5h://127.0.0.1:9050',
-                    'https': 'socks5h://127.0.0.1:9050'
-            }
-            try:
-                
-                # Fetch data from the URL via Tor proxy
-                response = requests.get(url, proxies=proxies, timeout=30)
-                response.raise_for_status()  # Raise an error for bad status codes
-                data = response.json()
+    # URL of the JSON data
+    url = 'https://www.ransomlook.io/export/2'
+    group_name = "cloak"
 
-                # Define the ransomware group name
-                group_name = "cloak"
+    # Tor proxy configuration
+    proxies = {
+            'http': 'socks5h://127.0.0.1:9050',
+            'https': 'socks5h://127.0.0.1:9050'
+    }
+    try:
 
-                # Extract and transform data for the specified ransomware group
-                group_data = data.get(group_name, [])
+        # Fetch data from the URL via Tor proxy
+        response = requests.get(url, proxies=proxies, timeout=30)
+        response.raise_for_status()  # Raise an error for bad status codes
+        data = response.json()
 
-                for entry in group_data:
-                    post_title = entry.get("post_title", "")
-                    description = entry.get("description", "N/A")
-                    #print(f"Name: {post_title}")
-                    #print(f"Desc.: {description}")
-                    appender(post_title,group_name,description)
-                    """
-                    +------------------------------+------------------+----------
-                    | Description | Published Date | Victim's Website | Post URL |
-                    +------------------------------+------------------+----------+
-                    |      X      |      X         |                 |     x    |
-                    +------------------------------+------------------+----------+
-                    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url=""):
-                    """
-            except Exception as e:
-                errlog(group_name + ' - parsing fail with error: ' + str(e))
+        # Extract and transform data for the specified ransomware group
+        group_data = data.get(group_name, [])
 
+        for entry in group_data:
+            post_title = entry.get("post_title", "")
+            description = entry.get("description", "N/A")
+            appender(post_title, group_name, description)
+            """
+            +------------------------------+------------------+----------+
+            | Description | Published Date | Victim's Website | Post URL |
+            +------------------------------+------------------+----------+
+            |      X      |      X         |                 |     x    |
+            +------------------------------+------------------+----------+
+            Rappel : def appender(post_title, group_name, description="", website="", published="", post_url=""):
+            """
+    except Exception as e:
+        errlog(group_name + ' - parsing fail with error: ' + str(e))
