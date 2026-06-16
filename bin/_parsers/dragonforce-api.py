@@ -14,6 +14,8 @@ import requests
 import socks
 import json
 import urllib3
+from pathlib import Path
+from dotenv import load_dotenv
 
 ## -------------------- CONFIG --------------------
 from shared_utils import appender, stdlog, errlog

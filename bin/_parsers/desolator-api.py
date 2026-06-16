@@ -19,6 +19,7 @@ load_dotenv(dotenv_path=env_path)
 # Source URL
 URL = "http://po4tq2brx4rgwbdx4mac24fz34uuuf7oigosebp32n2462m2vxl6biqd.onion"
 API = URL + "/api/victims?page=1&rowsPerPage=50"
+GROUP_NAME = "desolator"
 
 PROXIES = {
     "http": "socks5h://127.0.0.1:9050",
@@ -32,7 +33,7 @@ def fetch_data():
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        errlog(f"[{group_name}] ❌ Error fetching data: {e}")
+        errlog(f"[{GROUP_NAME}] ❌ Error fetching data: {e}")
         return {}
 
 def convert_date(date_str):

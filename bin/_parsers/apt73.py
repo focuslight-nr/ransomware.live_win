@@ -36,6 +36,9 @@ def main():
                 stdlog(f'Parsing: {html_doc}')
                 soup = BeautifulSoup(file, 'html.parser')
                 segment_box = soup.find('div', class_='segment__box')
+                if segment_box is None:
+                    stdlog(f"apt73 - no segment__box found in {filename}; skipping")
+                    continue
                 for segment in segment_box.find_all('div', class_='segment'):
                     link = segment.get('onclick').split("'")[1] if segment.get('onclick') else None
                     victim = segment.find('div', class_='segment__text__off').text.strip() if segment.find('div', class_='segment__text__off') else None

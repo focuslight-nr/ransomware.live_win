@@ -47,6 +47,9 @@ def main():
 
                 # Find the script tag containing JSON data
                 script_tag = soup.find('script', {'id': '__NEXT_DATA__'})
+                if script_tag is None or not script_tag.string:
+                    stdlog(f"cactus - no __NEXT_DATA__ found in {filename}; skipping")
+                    continue
 
                 # Extract JSON content from the script tag
                 json_content = script_tag.string

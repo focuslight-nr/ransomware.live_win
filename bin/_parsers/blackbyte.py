@@ -49,7 +49,7 @@ def main():
                 pass
         try:
             if filename.startswith('blackbyte-'):
-                html_doc='source/'+filename
+                html_doc = tmp_dir / filename
                 file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 tables = soup.find_all('table', class_='table')
@@ -61,9 +61,8 @@ def main():
                    last_date = rows[-1].find('td').text
                    #print(f"Table Caption: {caption}")
                    #print(f"Last Date: {last_date}")
-                   last_date = datetime.strptime(last_date, '%Y-%m-%d %H:%M')
+                   last_date = datetime.datetime.strptime(last_date, '%Y-%m-%d %H:%M')
                    published = last_date.strftime('%Y-%m-%d %H:%M:%S.%f')
                    appender(caption, 'blackbyte', '','',published)
         except Exception as e:
             errlog('blackbyte: ' + 'parsing fail: '  + str(e))
-            

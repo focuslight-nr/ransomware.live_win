@@ -26,7 +26,7 @@ load_dotenv(dotenv_path=env_path)
 home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
 tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 
-db_dir = Path(home + os.getenv("DB_DIR"))
+db_dir = home / os.getenv("DB_DIR", "db").strip("/")
 
 
 import requests

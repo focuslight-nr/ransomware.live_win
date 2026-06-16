@@ -19,6 +19,7 @@ load_dotenv(dotenv_path=env_path)
 
 # Source URL (à personnaliser selon le parser)
 URL = "http://cephalus6oiypuwumqlwurvbmwsfglg424zjdmywfgqm4iehkqivsjyd.onion/api/domains"
+GROUP_NAME = "cephalus"
 
 PROXIES = {
     "http": "socks5h://127.0.0.1:9050",

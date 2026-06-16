@@ -15,6 +15,8 @@ import socks
 import json
 import urllib3
 from urllib.parse import urlparse
+from pathlib import Path
+from dotenv import load_dotenv
 
 ## -------------------- CONFIG --------------------
 from shared_utils import appender, stdlog, errlog
@@ -94,4 +96,3 @@ def main():
     except Exception as e:
         errlog('morpheus' + ' - parsing fail with error: ' + str(e))
 
-        

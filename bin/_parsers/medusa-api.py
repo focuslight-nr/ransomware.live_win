@@ -60,7 +60,8 @@ def main():
 
     # json_data = fetch_json_from_onduion_url(json_onion_url)
     try:
-        json_data = openjson('/tmp/medusa.json')
+        cache_path = Path('/tmp/medusa.json')
+        json_data = openjson(str(cache_path)) if cache_path.exists() else fetch_json_from_onion_url(json_onion_url)
         if json_data is not None:
             for item in json_data['list']:
                 victim = item['company_name']
