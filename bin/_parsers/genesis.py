@@ -40,6 +40,11 @@ load_dotenv(dotenv_path=env_path)
 
 home = os.getenv("RANSOMWARELIVE_HOME", "")
 tmp_dir = Path(home + os.getenv("TMP_DIR", ""))
+tmp_dir.mkdir(parents=True, exist_ok=True)
+extract_fqdn = tldextract.TLDExtract(
+    cache_dir=str(tmp_dir / ".tldextract"),
+    suffix_list_urls=(),
+)
 
 TOR_SOCKS_HOST = os.getenv("TOR_SOCKS_HOST", "127.0.0.1")
 TOR_SOCKS_PORT = int(os.getenv("TOR_SOCKS_PORT", "9050"))
@@ -191,9 +196,11 @@ def main():
                     time.sleep(TOR_SLEEP)
 
 
-                extracted = tldextract.extract(website)
-
-                website = f"{extracted.domain}.{extracted.suffix}"
+                extracted = extract_fqdn(website)
+                if extracted.domain and extracted.suffix:
+                    website = f"{extracted.domain}.{extracted.suffix}"
+                else:
+                    website = ""
                 """
                 print('victim:', post_title)
                 print('description:', description)

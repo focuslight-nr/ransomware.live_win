@@ -8,7 +8,7 @@ if sys.platform != 'win32':
     import fcntl
 import traceback
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from shared_utils import stdlog, errlog, screenshot
 import time
 import threading
@@ -20,11 +20,13 @@ import socket
 import psutil
 
 
-# Load environment variables from ../.env
+# Load environment variables from ../.env without overriding process env.
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent
 env_path = home / ".env"
-load_dotenv(dotenv_path=env_path)
+for key, value in dotenv_values(env_path).items():
+    if value is not None:
+        os.environ.setdefault(key, value)
 
 # Paths from environment variables
 TOR_PWD = os.getenv("TOR_PASSWORD")
@@ -49,7 +51,7 @@ def start_managed_tor():
             creation_flags = 0
             if sys.platform == 'win32':
                 creation_flags = subprocess.CREATE_NO_WINDOW
-            
+
             socks_port = "9050"
             if ":" in proxy_address:
                 socks_port = proxy_address.split(":")[-1]
@@ -65,13 +67,13 @@ def start_managed_tor():
                 stderr=subprocess.DEVNULL,
                 creationflags=creation_flags
             )
-            
+
             # Wait for Tor to initialize and bootstrap
             max_retries = 30
             for i in range(max_retries):
                 if managed_tor_process.poll() is not None:
                     raise Exception(f"Tor process exited unexpectedly with code {managed_tor_process.poll()}")
-                
+
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     result = sock.connect_ex(('127.0.0.1', int(socks_port)))
                     if result == 0:
@@ -82,7 +84,7 @@ def start_managed_tor():
                                 else:
                                     s.sendall(b"AUTHENTICATE\r\n")
                                 s.recv(1024)
-                                
+
                                 s.sendall(b"GETINFO status/bootstrap-phase\r\n")
                                 response = s.recv(1024).decode()
                                 if "PROGRESS=100" in response:
@@ -90,13 +92,13 @@ def start_managed_tor():
                                     return
                         except Exception:
                             pass
-                
+
                 if i % 5 == 0 and i > 0:
                     stdlog("Waiting for Tor to initialize...")
                 time.sleep(1)
-            
+
             raise Exception("Timeout waiting for Tor to initialize")
-            
+
         except Exception as e:
             errlog(f"Failed to start managed Tor: {e}")
             if managed_tor_process:
@@ -198,7 +200,7 @@ def execute_main(file_path, execution_data, run_date):
 
         # Measure execution time
         start_time = time.time()
-        
+
         # Load and execute the module
         spec = importlib.util.spec_from_file_location(module_name, file_path)
         module = importlib.util.module_from_spec(spec)
@@ -237,11 +239,11 @@ def main():
       | |___     ___| |                      | |___________| |
       |_____|\_/|_____|                      |_______________|
         _|__|/ \|_|_.............X.............._|________|_
-       / ********** \                          / ********** \ 
-     /  ************  \   ransomware.live     /  ************  \ 
+       / ********** \                          / ********** \
+     /  ************  \   ransomware.live     /  ************  \
     --------------------                    --------------------
     '''
-    )   
+    )
     start_time = time.time()
     parser = argparse.ArgumentParser(description="Execute all main functions in ./parsers/ or a specific one.")
     parser.add_argument("-G", "--group", help="Specify the group (parser's filename without .py) to execute.", default=None)
@@ -270,7 +272,7 @@ def main():
     try:
         if TOR_AUTO_MANAGE:
             start_managed_tor()
-        
+
         parsers_dir = "bin/_parsers"
         if not os.path.isdir(parsers_dir):
             errlog(f"The directory {parsers_dir} does not exist.")
@@ -303,7 +305,7 @@ def main():
     finally:
         if TOR_AUTO_MANAGE:
             stop_managed_tor()
-            
+
         # Save execution times to JSON file
         with open(execution_time_path, "w") as json_file:
             json.dump(execution_data, json_file, indent=4)

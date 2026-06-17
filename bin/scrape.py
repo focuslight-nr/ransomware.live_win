@@ -8,7 +8,7 @@ import aiofiles
 import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 import os
 import argparse
 import sys
@@ -41,7 +41,9 @@ SPA_SCRAPE_GROUPS = {"termite", "cry0", "worldleaks", "lockbit 5.0", "shinyhunte
 # -------------------- ENV LOADING --------------------
 script_dir = Path(__file__).resolve().parent
 env_path = script_dir.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+for key, value in dotenv_values(env_path).items():
+    if value is not None:
+        os.environ.setdefault(key, value)
 
 home = os.getenv("RANSOMWARELIVE_HOME", ".")
 db_dir = Path(home + os.getenv("DB_DIR", "/db/"))

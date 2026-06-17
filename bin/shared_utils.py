@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageDraw, ImageFilter
 from PIL.PngImagePlugin import PngInfo
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from urllib.parse import urlparse
 ## Hudsonrock 
 import tldextract
@@ -43,11 +43,13 @@ import base64
 ### screenshot 
 from libcapture import capture_victim
 
-# Load environment variables from ../.env
+# Load environment variables from ../.env without overriding process env.
 # Determine project root based on script location
 home = Path(__file__).resolve().parent.parent
 env_path = home / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
+for key, value in dotenv_values(env_path).items():
+    if value is not None:
+        os.environ.setdefault(key, value)
 
 # Export home path as RANSOMWARELIVE_HOME if not set in env
 if not os.getenv("RANSOMWARELIVE_HOME"):
@@ -62,6 +64,11 @@ if not os.getenv("DB_DIR"):
 # Paths from environment variables
 db_dir = home.joinpath(os.getenv("DB_DIR").strip('/'))
 tmp_dir = home.joinpath(os.getenv("TMP_DIR").strip('/'))
+tmp_dir.mkdir(parents=True, exist_ok=True)
+_tldextract = tldextract.TLDExtract(
+    cache_dir=str(tmp_dir / ".tldextract"),
+    suffix_list_urls=(),
+)
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # Gemini
@@ -223,7 +230,7 @@ def isexception(victim, group):
 
 def extract_fqdn(url):
     # Extract components using tldextract
-    extract_result = tldextract.extract(url)
+    extract_result = _tldextract(url)
     
     # Exclude 'www' if it is the subdomain
     subdomain = '' if extract_result.subdomain == 'www' else extract_result.subdomain

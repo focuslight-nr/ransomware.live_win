@@ -9,7 +9,7 @@ import subprocess
 import socket
 import psutil
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from shared_utils import stdlog, errlog
 
 # Import capture function from libcapture
@@ -20,7 +20,9 @@ from libcapture import capture_victim
 script_dir = Path(__file__).resolve().parent
 home = script_dir.parent
 env_path = home / ".env"
-load_dotenv(dotenv_path=env_path)
+for key, value in dotenv_values(env_path).items():
+    if value is not None:
+        os.environ.setdefault(key, value)
 
 # Configuration
 TOR_PWD = os.getenv("TOR_PASSWORD")
