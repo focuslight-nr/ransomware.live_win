@@ -31,10 +31,10 @@ def main():
 
     # Define the date format to convert to
     date_format = "%Y-%m-%d %H:%M:%S.%f"
-    
-    ## Get the ransomware group name from the script name 
+
+    ## Get the ransomware group name from the script name
     script_path = os.path.abspath(__file__)
-    # If it's a symbolic link find the link source 
+    # If it's a symbolic link find the link source
     if os.path.islink(script_path):
         original_path = os.readlink(script_path)
         if not os.path.isabs(original_path):
@@ -42,7 +42,7 @@ def main():
         original_path = os.path.abspath(original_path)
         original_name = os.path.basename(original_path)
         group_name = original_name.replace('.py','')
-    # else get the script name 
+    # else get the script name
     else:
         script_name = os.path.basename(script_path)
         group_name = script_name.replace('.py','')
@@ -54,6 +54,10 @@ def main():
                 file=open(html_doc, "r", encoding="utf-8", errors="ignore")
                 soup=BeautifulSoup(file,'html.parser')
                 victims_div = soup.find("div", class_="row bg-secondary p-3 rounded-4 roboto")
+                if victims_div is None:
+                    errlog(group_name + f' - victim container not found in file: {filename}')
+                    continue
+
                 for victim_div in victims_div.find_all("div", class_="col-sm-4 p-2"):
                     name_tag = victim_div.find("h5", class_="fw-bold mb-2")
                     victim = name_tag.get_text(strip=True) if name_tag else ""
@@ -61,7 +65,11 @@ def main():
                     description = description_tag.get_text(strip=True) if description_tag else "N/A"
                     link_tag = victim_div.find("a", class_="btn btn-light fw-bold w-100")
                     post_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else "N/A"
-                
+
+                    if not victim:
+                        stdlog(f"{group_name} - skipping empty victim card in {filename}")
+                        continue
+
                     #appender(name, group_name, description,website,created_formatted,link)
                     print(f'Victim: {victim}')
                     appender(
