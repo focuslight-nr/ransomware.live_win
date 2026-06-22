@@ -131,11 +131,27 @@ def siteappender(name, location):
 def wait_for_lock(lock_file_path, check_interval=5):
     """
     Waits until the specified lock file no longer exists.
-    
+
     :param lock_file_path: Path to the lock file.
     :param check_interval: Time in seconds to wait between checks.
     """
     while Path(lock_file_path).exists():
+        try:
+            content = Path(lock_file_path).read_text(encoding="utf-8", errors="ignore")
+            pid = None
+            for line in content.splitlines():
+                if line.startswith("PID"):
+                    pid = int(line.split(":", 1)[1].strip())
+                    break
+            if pid is not None:
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    Path(lock_file_path).unlink(missing_ok=True)
+                    stdlog(f"Removed stale lock file '{lock_file_path}' for dead PID {pid}.")
+                    continue
+        except Exception as exc:
+            errlog(f"Error while inspecting lock file '{lock_file_path}': {exc}")
         stdlog(f"Waiting for lock file '{lock_file_path}' to be released...")
         time.sleep(check_interval)
     stdlog(f"Lock file '{lock_file_path}' has been released. Proceeding...")

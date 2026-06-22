@@ -64,6 +64,20 @@ if TOR_AUTO_MANAGE:
 
 proxy_address = os.getenv("TOR_PROXY_SERVER", "socks5://127.0.0.1:9050")  # Default to Tor proxy
 
+TOLERATED_NETWORK_ERROR_MARKERS = (
+    "ERR_SOCKS_CONNECTION_FAILED",
+    "Host unreachable",
+    "Connection refused",
+    "Connection reset",
+    "Proxy connection timed out",
+    "Timeout",
+    "timed out",
+    "Temporary failure in name resolution",
+    "Name or service not known",
+    "network is unreachable",
+    "Target page, context or browser has been closed",
+)
+
 # -------------------- AI CAPTCHA SOLVER --------------------
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -245,6 +259,45 @@ def restart_tor_control_port(control_port=9051, password=None):
 # -------------------- MANAGED TOR --------------------
 managed_tor_process = None
 
+def get_socks_port() -> int:
+    try:
+        return int(proxy_address.rsplit(":", 1)[1])
+    except Exception:
+        return 9050
+
+def is_port_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return True
+    except Exception:
+        return False
+
+def is_tor_bootstrapped(socks_port: int, control_port: int = 9051) -> bool:
+    if not is_port_open("127.0.0.1", socks_port):
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", control_port), timeout=3) as s:
+            if TOR_PWD:
+                s.sendall(f"AUTHENTICATE \"{TOR_PWD}\"\r\n".encode())
+            else:
+                s.sendall(b"AUTHENTICATE\r\n")
+            auth_response = s.recv(1024).decode()
+            if "250" not in auth_response:
+                return False
+            s.sendall(b"GETINFO status/bootstrap-phase\r\n")
+            response = s.recv(1024).decode()
+            return "PROGRESS=100" in response
+    except Exception:
+        # If SOCKS is reachable but the control port is not, reuse the existing
+        # listener instead of failing the whole scrape run.
+        return True
+
+def is_tolerated_network_error(message: str) -> bool:
+    if not message:
+        return False
+    lowered = message.lower()
+    return any(marker.lower() in lowered for marker in TOLERATED_NETWORK_ERROR_MARKERS)
+
 def start_managed_tor():
     global managed_tor_process
     if TOR_AUTO_MANAGE:
@@ -255,9 +308,11 @@ def start_managed_tor():
                 creation_flags = subprocess.CREATE_NO_WINDOW
             
             # Extract port from proxy_address (e.g., socks5://127.0.0.1:9050)
-            socks_port = "9050"
-            if ":" in proxy_address:
-                socks_port = proxy_address.split(":")[-1]
+            socks_port = str(get_socks_port())
+
+            if is_tor_bootstrapped(int(socks_port)):
+                stdlog(f"Reusing existing Tor listener on SOCKS port {socks_port}")
+                return
 
             cmd = [TOR_BINARY_PATH]
             if TOR_TORRC_PATH:
@@ -277,32 +332,12 @@ def start_managed_tor():
                 if managed_tor_process.poll() is not None:
                     raise Exception(f"Tor process exited unexpectedly with code {managed_tor_process.poll()}")
                 
-                # Check if SOCKS port is open
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    result = sock.connect_ex(('127.0.0.1', int(socks_port)))
-                    if result == 0:
-                        # Port is open, now check if Tor is actually bootstrapped via ControlPort
-                        try:
-                            with socket.create_connection(("127.0.0.1", 9051)) as s:
-                                if TOR_PWD:
-                                    s.sendall(f"AUTHENTICATE \"{TOR_PWD}\"\r\n".encode())
-                                else:
-                                    s.sendall(b"AUTHENTICATE\r\n")
-                                s.recv(1024)
-                                
-                                s.sendall(b"GETINFO status/bootstrap-phase\r\n")
-                                response = s.recv(1024).decode()
-                                if "PROGRESS=100" in response:
-                                    stdlog(f"Tor is fully bootstrapped and ready on SOCKS port {socks_port}")
-                                    # Cool-down period to let circuits stabilize
-                                    time.sleep(5)
-                                    return
-                                else:
-                                    if i % 5 == 0:
-                                        stdlog("Tor port is open, waiting for network bootstrap (100%)...")
-                        except Exception:
-                            # Control port might not be ready yet
-                            pass
+                if is_tor_bootstrapped(int(socks_port)):
+                    stdlog(f"Tor is fully bootstrapped and ready on SOCKS port {socks_port}")
+                    time.sleep(5)
+                    return
+                if is_port_open("127.0.0.1", int(socks_port)) and i % 5 == 0:
+                    stdlog("Tor port is open, waiting for network bootstrap (100%)...")
                 
                 if i % 5 == 0 and i > 0:
                     stdlog("Waiting for Tor to initialize...")
@@ -375,6 +410,27 @@ def remove_lock_file():
         lock_file_path.unlink()
         stdlog("Previous lock removed.")
 
+def cleanup_stale_lock_file():
+    if not lock_file_path.exists():
+        return False
+
+    try:
+        with open(lock_file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        pid = None
+        for line in content.splitlines():
+            if line.startswith("PID"):
+                pid = int(line.split(":", 1)[1].strip())
+                break
+        if pid is not None and is_process_alive(pid):
+            return False
+    except Exception as e:
+        errlog(f"Error inspecting existing lock file: {e}")
+
+    lock_file_path.unlink(missing_ok=True)
+    stdlog(f"Removed stale lock file: {lock_file_path}")
+    return True
+
 # -------------------- UTILS --------------------
 def offline_for_more_than(last_scrape, days):
     try:
@@ -424,11 +480,13 @@ async def fetch_html_via_tor(url: str) -> str:
 
 # -------------------- SCRAPER --------------------
 async def scrape_group(context, group, bypass_enabled_flag, verbose):
+    stats = context._rl_stats
     group_name = group["name"]
     safe_group_name = sanitize_filename(group_name)
     special_path = group_name.lower() in {g.lower() for g in SPECIAL_HTML_FETCH_GROUPS}
 
     for location in group["locations"]:
+        stats["locations_seen"] += 1
         slug = location["slug"]
 
         if bypass_enabled_flag or location["enabled"]:
@@ -724,6 +782,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                         "title": title,
                         "enabled": True,
                     })
+                    stats["locations_succeeded"] += 1
                     if verbose:
                         stdlog(f"[{group_name}] Successfully scraped {slug}")
 
@@ -751,11 +810,17 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
                 except Exception as e:
                     now = get_current_timestamp()
+                    message = str(e).splitlines()[0] if str(e).splitlines() else str(e)
                     location.update({
                         "available": False,
                         "lastscrape": now,
                     })
-                    errlog(f"[{group_name}] Error scraping {slug}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
+                    if is_tolerated_network_error(message):
+                        stats["network_failures"] += 1
+                        stdlog(f"[{group_name}] Tolerated network failure for {slug}: {message}")
+                    else:
+                        stats["other_failures"] += 1
+                        errlog(f"[{group_name}] Error scraping {slug}: {message}")
                     # Disable location if offline for more than the threshold days
                     days = 30
                     if offline_for_more_than(location.get("updated", now), days):
@@ -809,6 +874,13 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
             proxy={"server": proxy_address},
             ignore_https_errors=True
         )
+        context._rl_stats = {
+            "groups_seen": 0,
+            "locations_seen": 0,
+            "locations_succeeded": 0,
+            "network_failures": 0,
+            "other_failures": 0,
+        }
 
         await context.set_extra_http_headers({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -833,10 +905,12 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
 
         async def sem_scrape(group, index):
             async with semaphore:
+                context._rl_stats["groups_seen"] += 1
                 stdlog(f"[{index}/{len(groups_to_scrape)}] Starting scrape for group: {group['name']}")
                 try:
                     await scrape_group(context, group, bypass_enabled_flag, verbose)
                 except Exception as e:
+                    context._rl_stats["other_failures"] += 1
                     errlog(f"Fatal error scraping group {group['name']}: {e}")
             # Short pause between groups to let Tor circuits breathe.
             # Kept OUTSIDE the semaphore so the concurrency slot is released as
@@ -858,6 +932,16 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
         with json_file_path.open("w", encoding="utf-8") as file:
             json.dump(all_groups, file, indent=4)
             stdlog("Updated groups.json")
+
+        stats = context._rl_stats
+        stdlog(
+            "Scrape summary: "
+            f"groups={stats['groups_seen']} "
+            f"locations={stats['locations_seen']} "
+            f"ok={stats['locations_succeeded']} "
+            f"network_failures={stats['network_failures']} "
+            f"other_failures={stats['other_failures']}"
+        )
 
         await browser.close()
 
@@ -1019,7 +1103,7 @@ if __name__ == "__main__":
     parser.add_argument("-V", "--verbose", help="Display more information", action="store_true")
     args = parser.parse_args()
 
-    if args.force:
+    if args.force and not cleanup_stale_lock_file():
         remove_lock_file()
 
     lock_file = None
