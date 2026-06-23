@@ -452,6 +452,26 @@ def extract_title_from_html(html_text: str) -> str:
         pass
     return ""
 
+
+async def save_html_via_tor_fallback(group_name: str, slug: str, filename: Path) -> tuple[str, bool]:
+    """
+    Fall back to a lightweight requests-based fetch when the browser proxy path
+    fails before any meaningful page content can be captured.
+    """
+    try:
+        html_text = await fetch_html_via_tor(slug)
+        title = extract_title_from_html(html_text) or "(no title)"
+        async with aiofiles.open(filename, "w", encoding="utf-8", errors="ignore") as f:
+            await f.write(html_text)
+        stdlog(f"[{group_name}] Fallback HTML fetch via Tor succeeded for {slug}")
+        return title, True
+    except Exception as e:
+        stdlog(
+            f"[{group_name}] Fallback HTML fetch via Tor failed for {slug}: "
+            f"{str(e).splitlines()[0] if str(e).splitlines() else str(e)}"
+        )
+        return "", False
+
 def scrape_onion_text(url: str) -> str:
     """
     Blocking HTTP fetch via Tor SOCKS proxy using requests (as per your snippet).
@@ -497,6 +517,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                 page = None
                 try:
                     stdlog(f"[{group_name}] Scraping {slug} ...")
+                    title = ""
 
                     if special_path:
                         stdlog(f"[{group_name}] use simple HTML fetch for {slug}")
@@ -511,18 +532,24 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     else:
                         # ---- DEFAULT: Playwright path ----
                         page = await context.new_page()
-                        
+                        used_tor_fallback = False
+
                         # Set group-specific timeouts and flags
                         is_spa = group_name.lower() in {g.lower() for g in SPA_SCRAPE_GROUPS}
                         goto_timeout = 180000 if is_spa else 90000
-                        
+
                         try:
                             await page.goto(slug, wait_until="load", timeout=goto_timeout)
                         except Exception as e:
-                            stdlog(f"[{group_name}] goto timed out or failed, but trying to save what we have: {str(e).splitlines()[0]}")
+                            goto_error = str(e).splitlines()[0]
+                            stdlog(f"[{group_name}] goto timed out or failed, but trying to save what we have: {goto_error}")
+                            if "ERR_SOCKS_CONNECTION_FAILED" in goto_error:
+                                title, used_tor_fallback = await save_html_via_tor_fallback(
+                                    group_name, slug, filename
+                                )
 
                         # Dynamic wait logic for SPA rendering
-                        if is_spa:
+                        if not used_tor_fallback and is_spa:
                             stdlog(f"[{group_name}] SPA detected. Waiting for rendering (max 60s)...")
                             # Scroll to trigger lazy loading
                             await page.mouse.move(x=500, y=400)
@@ -656,7 +683,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                     stdlog(f"[{group_name}] Network idle reached after challenge.")
                                 except:
                                     pass
-                        else:
+                        elif not used_tor_fallback:
                             try:
                                 # Try to wait for network to be idle, but don't fail if it takes too long
                                 await page.wait_for_load_state("networkidle", timeout=10000)
@@ -668,7 +695,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             await asyncio.sleep(5)
                             
                         # Handle specific captchas
-                        if AI_CAPTCHA_SOLVING_ENABLED and group_name.lower().replace(" ", "") == "thegentlemen":
+                        if not used_tor_fallback and AI_CAPTCHA_SOLVING_ENABLED and group_name.lower().replace(" ", "") == "thegentlemen":
                             try:
                                 captcha_img = await page.query_selector('img#math-captcha-image')
                                 if captcha_img:
@@ -689,7 +716,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             except Exception as ce:
                                 errlog(f"[{group_name}] Error during captcha solving: {ce}")
 
-                        if group_name.lower() == "shadowbyt3$":
+                        if not used_tor_fallback and group_name.lower() == "shadowbyt3$":
                             for attempt in range(3):
                                 try:
                                     await page.wait_for_load_state("domcontentloaded", timeout=30000)
@@ -744,34 +771,35 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                     )
                                     await asyncio.sleep(3)
 
-                        content = None
-                        content_error = None
-                        for attempt in range(3):
-                            try:
-                                await page.wait_for_load_state("domcontentloaded", timeout=30000)
-                            except Exception:
-                                pass
+                        if not used_tor_fallback:
+                            content = None
+                            content_error = None
+                            for attempt in range(3):
+                                try:
+                                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+                                except Exception:
+                                    pass
 
-                            try:
-                                content = await page.content()
-                                break
-                            except Exception as e:
-                                content_error = e
-                                if "page is navigating" not in str(e).lower():
-                                    raise
-                                stdlog(
-                                    f"[{group_name}] Page is still navigating; "
-                                    f"retrying HTML capture ({attempt + 1}/3)..."
-                                )
-                                await asyncio.sleep(3)
+                                try:
+                                    content = await page.content()
+                                    break
+                                except Exception as e:
+                                    content_error = e
+                                    if "page is navigating" not in str(e).lower():
+                                        raise
+                                    stdlog(
+                                        f"[{group_name}] Page is still navigating; "
+                                        f"retrying HTML capture ({attempt + 1}/3)..."
+                                    )
+                                    await asyncio.sleep(3)
 
-                        if content is None:
-                            raise content_error
-                        title = await page.title()
-                        if verbose:
-                            stdlog(f"[{group_name}] Successfully got title for {slug}: {title}")
-                        async with aiofiles.open(filename, "w", encoding="utf-8") as f:
-                            await f.write(content)
+                            if content is None:
+                                raise content_error
+                            title = await page.title()
+                            if verbose:
+                                stdlog(f"[{group_name}] Successfully got title for {slug}: {title}")
+                            async with aiofiles.open(filename, "w", encoding="utf-8") as f:
+                                await f.write(content)
 
                     # Common updates
                     now = get_current_timestamp()
