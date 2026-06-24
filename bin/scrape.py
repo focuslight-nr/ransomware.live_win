@@ -258,6 +258,40 @@ def restart_tor_control_port(control_port=9051, password=None):
 
 # -------------------- MANAGED TOR --------------------
 managed_tor_process = None
+managed_tor_log_handle = None
+
+
+def get_managed_tor_log_path() -> Path:
+    return tmp_dir / "managed-tor.log"
+
+
+def read_managed_tor_log_tail(max_chars: int = 2000) -> str:
+    log_path = get_managed_tor_log_path()
+    try:
+        if not log_path.exists():
+            return ""
+        content = log_path.read_text(encoding="utf-8", errors="ignore")
+        return content[-max_chars:].strip()
+    except Exception:
+        return ""
+
+
+def open_managed_tor_log():
+    global managed_tor_log_handle
+    if managed_tor_log_handle and not managed_tor_log_handle.closed:
+        return managed_tor_log_handle
+
+    log_path = get_managed_tor_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    managed_tor_log_handle = open(log_path, "a", encoding="utf-8")
+    return managed_tor_log_handle
+
+
+def close_managed_tor_log():
+    global managed_tor_log_handle
+    if managed_tor_log_handle and not managed_tor_log_handle.closed:
+        managed_tor_log_handle.close()
+    managed_tor_log_handle = None
 
 def get_socks_port() -> int:
     try:
@@ -319,10 +353,13 @@ def start_managed_tor():
                 cmd.extend(["-f", TOR_TORRC_PATH])
             cmd.extend(["--ControlPort", "9051", "--SocksPort", socks_port])
 
+            tor_log_handle = open_managed_tor_log()
+            stdlog(f"Managed Tor log: {get_managed_tor_log_path()}")
+
             managed_tor_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=tor_log_handle,
+                stderr=subprocess.STDOUT,
                 creationflags=creation_flags
             )
             
@@ -347,8 +384,17 @@ def start_managed_tor():
             
         except Exception as e:
             errlog(f"Failed to start managed Tor: {e}")
+            log_tail = read_managed_tor_log_tail()
+            if log_tail:
+                errlog(f"Managed Tor log tail:\n{log_tail}")
             if managed_tor_process:
                 managed_tor_process.kill()
+                try:
+                    managed_tor_process.wait(timeout=5)
+                except Exception:
+                    pass
+                managed_tor_process = None
+            close_managed_tor_log()
             sys.exit(1)
 
 def stop_managed_tor():
@@ -361,6 +407,7 @@ def stop_managed_tor():
         except subprocess.TimeoutExpired:
             managed_tor_process.kill()
         managed_tor_process = None
+    close_managed_tor_log()
 
 # -------------------- LOCKING --------------------
 lock_file_path = tmp_dir / "scrape.lock"
