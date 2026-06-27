@@ -76,6 +76,34 @@ def release_lock(lock_file):
 # -------------------- MANAGED TOR --------------------
 managed_tor_process = None
 
+
+def resolve_torrc_path():
+    if not TOR_TORRC_PATH:
+        return None
+
+    configured_path = Path(TOR_TORRC_PATH).expanduser()
+    if configured_path.exists():
+        return str(configured_path)
+
+    try:
+        resolved_binary_dir = Path(TOR_BINARY_PATH).expanduser().resolve().parent
+    except Exception:
+        resolved_binary_dir = None
+
+    if resolved_binary_dir:
+        for filename in ("torrc.txt", "torrc"):
+            candidate = resolved_binary_dir / filename
+            if candidate.exists():
+                stdlog(
+                    f"Configured TOR_TORRC_PATH not found; using {candidate} instead"
+                )
+                return str(candidate)
+
+    errlog(
+        f"Configured TOR_TORRC_PATH not found; starting Tor without explicit torrc: {configured_path}"
+    )
+    return None
+
 def start_managed_tor():
     global managed_tor_process
     if TOR_AUTO_MANAGE:
@@ -90,8 +118,9 @@ def start_managed_tor():
                 socks_port = proxy_address.split(":")[-1]
 
             cmd = [TOR_BINARY_PATH]
-            if TOR_TORRC_PATH:
-                cmd.extend(["-f", TOR_TORRC_PATH])
+            torrc_path = resolve_torrc_path()
+            if torrc_path:
+                cmd.extend(["-f", torrc_path])
             cmd.extend(["--ControlPort", "9051", "--SocksPort", socks_port])
 
             managed_tor_process = subprocess.Popen(
