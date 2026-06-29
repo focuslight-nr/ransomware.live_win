@@ -30,7 +30,7 @@ tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
 def main():
     for filename in os.listdir(tmp_dir):
         try:
-            if filename.startswith('lockbit5-'):
+            if filename.startswith(("lockbit5-", "lockbit5.0-")):
                 html_doc= tmp_dir / filename
                 #stdlog('Processing ' + filename)
                 file=open(html_doc, "r", encoding="utf-8", errors="ignore")
