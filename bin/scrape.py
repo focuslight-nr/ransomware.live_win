@@ -306,6 +306,32 @@ def is_port_open(host: str, port: int) -> bool:
     except Exception:
         return False
 
+def read_tor_control_reply(sock: socket.socket, timeout: float = 3.0) -> str:
+    """
+    Read a complete Tor control-port reply.
+    Tor replies can be multi-line and may arrive across multiple recv() calls,
+    so a single recv(1024) is not reliable for readiness checks.
+    """
+    sock.settimeout(timeout)
+    chunks = []
+    while True:
+        data = sock.recv(4096)
+        if not data:
+            break
+
+        text = data.decode(errors="ignore")
+        chunks.append(text)
+        reply = "".join(chunks)
+        lines = [line for line in reply.splitlines() if line]
+        if not lines:
+            continue
+
+        last_line = lines[-1]
+        if len(last_line) >= 4 and last_line[:3].isdigit() and last_line[3] == " ":
+            return reply
+
+    return "".join(chunks)
+
 def is_tor_bootstrapped(socks_port: int, control_port: int = 9051) -> bool:
     if not is_port_open("127.0.0.1", socks_port):
         return False
@@ -315,11 +341,11 @@ def is_tor_bootstrapped(socks_port: int, control_port: int = 9051) -> bool:
                 s.sendall(f"AUTHENTICATE \"{TOR_PWD}\"\r\n".encode())
             else:
                 s.sendall(b"AUTHENTICATE\r\n")
-            auth_response = s.recv(1024).decode()
-            if "250" not in auth_response:
+            auth_response = read_tor_control_reply(s)
+            if "250 OK" not in auth_response:
                 return False
             s.sendall(b"GETINFO status/bootstrap-phase\r\n")
-            response = s.recv(1024).decode()
+            response = read_tor_control_reply(s)
             return "PROGRESS=100" in response
     except Exception:
         # If SOCKS is reachable but the control port is not, reuse the existing
