@@ -2,7 +2,10 @@
     Parser for Leaknet
 """
 
-import os, json, re
+import codecs
+import json
+import os
+import re
 from bs4 import BeautifulSoup
 from shared_utils import appender, stdlog, errlog
 from pathlib import Path
@@ -19,42 +22,36 @@ def main():
             html_doc = tmp_dir / filename
             stdlog(f'Parsing: {html_doc}')
             try:
-                with open(html_doc, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                
-                # Leaknet stores data in a script tag as INIT_DATA
-                script = soup.find('script', string=re.compile('globalThis.INIT_DATA'))
-                if script:
+                with open(html_doc, 'r', encoding='utf-8', errors='ignore') as file:
+                    html = file.read()
+                soup = BeautifulSoup(html, 'html.parser')
+
+                json_items_found = False
+                match = re.search(r'JSON\.parse\(`(.*?)`\)', html, re.DOTALL)
+                if match:
                     try:
-                        # Improved regex to find JSON within backticks
-                        match = re.search(r'JSON\.parse\(`(.*?)`\)', script.string, re.DOTALL)
-                        if match:
-                            json_str = match.group(1)
-                            # Handle common escape sequences in JS template literals/JSON.parse
-                            # Instead of a simple replace, we use a more robust way to unescape
-                            try:
-                                # json_str is literally "{\"key\": \"val\"}"
-                                # We need to turn it into {"key": "val"}
-                                json_str = json_str.replace('\\"', '"').replace('\\\\', '\\')
-                                data = json.loads(json_str)
-                                articles = data.get('article_list_response', {}).get('result', {}).get('data', [])
-                                for art in articles:
-                                    victim = art.get('article_title', 'Unknown')
-                                    description = art.get('article_brief', '')
-                                    website = art.get('subject_site', '')
-                                    # Convert UNIX timestamp to YYYY-MM-DD HH:MM:SS.f
-                                    from datetime import datetime
-                                    ts = art.get('article_added_timestamp', 0)
-                                    published = ""
-                                    if ts:
-                                        published = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S.f')
-                                    post_url = ""
-                                    appender(victim, 'leaknet', description, website, published, post_url)
-                            except Exception as json_err:
-                                errlog(f"leaknet - JSON loads failed: {json_err}")
-                    except Exception as e:
-                        errlog(f"leaknet - script parsing error: {e}")
-                        errlog(f'leaknet - error parsing JSON: {e}')
+                        json_str = match.group(1)
+                        json_str = codecs.decode(json_str, 'unicode_escape')
+                        json_str = json_str.replace('\\/', '/').replace("\\'", "'")
+                        data = json.loads(json_str)
+                        articles = data.get('article_list_response', {}).get('result', {}).get('data', [])
+                        for art in articles:
+                            json_items_found = True
+                            victim = art.get('article_title', 'Unknown')
+                            description = art.get('article_brief', '')
+                            website = re.sub(r'^https?://', '', art.get('subject_site', '')).rstrip('/')
+                            from datetime import datetime
+                            ts = art.get('article_added_timestamp', 0)
+                            published = ""
+                            if ts:
+                                published = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S.%f')
+                            post_url = art.get('author_url', '')
+                            appender(victim, 'leaknet', description, website, published, post_url)
+                    except Exception as json_err:
+                        errlog(f"leaknet - JSON loads failed: {json_err}")
+
+                if json_items_found:
+                    continue
                 
                 # Fallback: Parse visible cards if script parsing fails
                 cards = soup.find_all('div', class_='card')

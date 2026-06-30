@@ -44,6 +44,39 @@ def parse_published(raw_value: str) -> str:
         return raw_value
 
 
+def parse_published_from_tag(time_tag) -> str:
+    if not time_tag:
+        return ""
+
+    datetime_attr = (time_tag.get("datetime") or "").strip()
+    display_text = time_tag.get_text(" ", strip=True)
+
+    # Some pages split the date between visible text and a time-only datetime attr.
+    if datetime_attr and re.fullmatch(r"\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2})?", datetime_attr):
+        cleaned_text = re.sub(r"\s+,", ",", display_text)
+        combined = f"{cleaned_text}:00" if re.fullmatch(r".*\d{2}:\d{2}$", cleaned_text) else cleaned_text
+        for fmt in ("%b %d, %Y, %H:%M:%S", "%b %d, %Y, %H:%M"):
+            try:
+                dt = datetime.datetime.strptime(combined, fmt)
+                return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+            except ValueError:
+                continue
+
+    published = parse_published(datetime_attr)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}.*", published):
+        return published
+
+    cleaned_text = re.sub(r"\s+,", ",", display_text)
+    for fmt in ("%b %d, %Y, %H:%M", "%b %d, %Y, %H:%M:%S"):
+        try:
+            dt = datetime.datetime.strptime(cleaned_text, fmt)
+            return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            continue
+
+    return published if published != datetime_attr else ""
+
+
 def main():
     for filename in os.listdir(tmp_dir):
         if not filename.startswith(f"{GROUP_NAME}-") or not filename.endswith(".html"):
@@ -68,9 +101,7 @@ def main():
                     continue
 
                 published_tag = entry.select_one("time")
-                published = parse_published(
-                    published_tag.get("datetime", "").strip() if published_tag else ""
-                )
+                published = parse_published_from_tag(published_tag)
 
                 website = ""
                 description_parts = []
