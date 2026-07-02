@@ -1,9 +1,11 @@
 import requests
 from datetime import datetime
 import os,datetime,sys, re
+from bs4 import BeautifulSoup
 from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urljoin
 
 # -------------------- CONFIG --------------------
 from shared_utils import appender, stdlog, errlog
@@ -53,15 +55,119 @@ def fetch_category_mapping():
     # categoryId -> name mapping
     return {cat['id']: cat['name'] for cat in data}
 
-def main():
-    print("Fetching category mapping...")
-    cat_map = fetch_category_mapping()
 
-    print("Fetching victim data...")
-    resp = requests.get(API_URL, proxies=PROXIES, timeout=60)
-    resp.raise_for_status()
-    data = resp.json()
+def extract_website(text):
+    if not text:
+        return ""
+
+    url_match = re.search(r'https?://[^\s)]+', text)
+    if url_match:
+        return url_match.group(0).rstrip('.,)')
+
+    domain_match = re.search(r'\b(?:www\.)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', text)
+    if domain_match:
+        domain = domain_match.group(0).rstrip('.,)')
+        return domain if domain.startswith(("http://", "https://")) else f"https://{domain}"
+
+    return ""
+
+
+def parse_html_fallback():
+    seen_urls = set()
+    for html_doc in sorted(tmp_dir.glob("blacknevas-*.html")):
+        with open(html_doc, "r", encoding="utf-8", errors="ignore") as file:
+            soup = BeautifulSoup(file, "html.parser")
+
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "").strip()
+            if not re.fullmatch(r"/[0-9a-f-]{36}", href):
+                continue
+
+            post_url = urljoin(URL, href)
+            if post_url in seen_urls:
+                continue
+
+            paragraphs = [
+                p.get_text(" ", strip=True)
+                for p in link.find_all("p")
+                if p.get_text(" ", strip=True)
+            ]
+
+            if not paragraphs:
+                continue
+
+            boilerplate = {
+                "preview",
+                "published",
+                "latest publication",
+                "revenue",
+                "category",
+            }
+            candidates = [
+                text for text in paragraphs
+                if text.lower() not in boilerplate and not text.startswith("$")
+            ]
+            if not candidates:
+                continue
+
+            non_domain_candidates = [
+                text for text in candidates
+                if not extract_website(text) or len(text.split()) > 2
+            ]
+
+            victim = (non_domain_candidates[0] if non_domain_candidates else candidates[0]).strip()
+            website = ""
+            for text in candidates:
+                website = extract_website(text)
+                if website:
+                    break
+
+            description = ""
+            for text in candidates[1:]:
+                if text == victim:
+                    continue
+                if text.startswith("$"):
+                    continue
+                if text.lower() in boilerplate:
+                    continue
+                description = text
+                break
+
+            revenue = ""
+            category_name = ""
+            for idx, text in enumerate(paragraphs[:-1]):
+                lower_text = text.lower()
+                if lower_text == "revenue":
+                    revenue = paragraphs[idx + 1]
+                elif lower_text == "category":
+                    category_name = paragraphs[idx + 1]
+
+            extra_infos = {
+                "Activity": category_name,
+                "Revenue": revenue,
+            }
+
+            appender(
+                victim=victim,
+                group_name="blacknevas",
+                description=description,
+                website=website,
+                published="",
+                post_url=post_url,
+                country="",
+                extra_infos=extra_infos,
+            )
+            seen_urls.add(post_url)
+
+def main():
     try:
+        print("Fetching category mapping...")
+        cat_map = fetch_category_mapping()
+
+        print("Fetching victim data...")
+        resp = requests.get(API_URL, proxies=PROXIES, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
         for idx, item in enumerate(data, 1):
             company_name, website = extract_company_and_website(item.get("company", ""))
             created_at = item.get("createdAt", "")[:19].replace("T", " ")
@@ -98,4 +204,5 @@ def main():
                 extra_infos=extra_infos
             )
     except Exception as e:
-        errlog('blacknevas' + ' - parsing fail with error: ' + str(e))
+        errlog('blacknevas' + ' - API parsing failed, trying HTML fallback: ' + str(e))
+        parse_html_fallback()
