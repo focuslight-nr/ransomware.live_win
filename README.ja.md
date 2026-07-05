@@ -1,4 +1,4 @@
-![Ransomware.live Logo](.github/ransomware.live.png)
+![Ransomware.live Logo](.github/ransomware_win_GUI.png)
 
 # Ransomware.live_win
 
