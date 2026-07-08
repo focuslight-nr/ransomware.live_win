@@ -14,6 +14,7 @@ import argparse
 import sys
 from shared_utils import get_current_timestamp, is_file_older_than, stdlog, errlog, sanitize_filename, safe_slug
 from playwright.async_api import async_playwright
+from playwright._impl._errors import TargetClosedError
 import socket
 if sys.platform != 'win32':
     import fcntl  # Works on Unix-based systems
@@ -89,7 +90,6 @@ def solve_captcha_image(base64_image: str) -> str:
     # Use OpenAI or Gemini vision models
     provider = AI_PROVIDER.lower()
     prompt = "Solve this captcha. If it is a math problem, provide ONLY the numeric answer. If it is a text/alphanumeric captcha, provide ONLY the characters. No other text."
-    
     if provider == 'gemini':
         if not GEMINI_API_KEY:
             return ""
@@ -97,9 +97,7 @@ def solve_captcha_image(base64_image: str) -> str:
             from google import genai
             from google.genai import types
             client = genai.Client(api_key=GEMINI_API_KEY)
-            
             image_bytes = base64.b64decode(base64_image)
-            
             response = client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=[
@@ -111,7 +109,6 @@ def solve_captcha_image(base64_image: str) -> str:
         except Exception as e:
             errlog(f"Gemini API error during captcha: {e}")
             return ""
-            
     elif provider == 'openai':
         if not OPENAI_API_KEY:
             return ""
@@ -394,7 +391,6 @@ def start_managed_tor():
             creation_flags = 0
             if sys.platform == 'win32':
                 creation_flags = subprocess.CREATE_NO_WINDOW
-            
             # Extract port from proxy_address (e.g., socks5://127.0.0.1:9050)
             socks_port = str(get_socks_port())
 
@@ -417,26 +413,23 @@ def start_managed_tor():
                 stderr=subprocess.STDOUT,
                 creationflags=creation_flags
             )
-            
+
+
             # Wait for Tor to initialize
             max_retries = 30
             for i in range(max_retries):
                 if managed_tor_process.poll() is not None:
                     raise Exception(f"Tor process exited unexpectedly with code {managed_tor_process.poll()}")
-                
                 if is_tor_bootstrapped(int(socks_port)):
                     stdlog(f"Tor is fully bootstrapped and ready on SOCKS port {socks_port}")
                     time.sleep(5)
                     return
                 if is_port_open("127.0.0.1", int(socks_port)) and i % 5 == 0:
                     stdlog("Tor port is open, waiting for network bootstrap (100%)...")
-                
                 if i % 5 == 0 and i > 0:
                     stdlog("Waiting for Tor to initialize...")
                 time.sleep(1)
-            
             raise Exception("Timeout waiting for Tor to initialize")
-            
         except Exception as e:
             errlog(f"Failed to start managed Tor: {e}")
             log_tail = read_managed_tor_log_tail()
@@ -658,10 +651,8 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             await page.mouse.wheel(delta_y=2000, delta_x=0)
                             await asyncio.sleep(5)
                             await page.mouse.wheel(delta_y=-2000, delta_x=0)
-                            
                             # Fixed sleep for base rendering
                             await asyncio.sleep(30)
-                            
                             # Wait until pulse animation disappears (common in modern React/Vite/Next.js)
                             try:
                                 await page.wait_for_selector(".animate-pulse", state="detached", timeout=30000)
@@ -681,7 +672,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                             stdlog(f"[{group_name}] Entry button detected. Clicking...")
                                             await entry_button.click()
                                             # Wait for a significant change or navigation
-                                            await asyncio.sleep(10) 
+                                            await asyncio.sleep(10)
                                             await page.wait_for_load_state("networkidle", timeout=30000)
                                     except Exception as ee:
                                         stdlog(f"[{group_name}] Entry button not found or click failed: {str(ee).splitlines()[0]}")
@@ -694,7 +685,6 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                     stdlog(f"[{group_name}] Redirect successful, victim page loaded.")
                                 except Exception as qe:
                                     stdlog(f"[{group_name}] Queue wait timed out or failed: {str(qe).splitlines()[0]}")
-                            
                             # Special handling for clop queue and captcha
                             if group_name.lower() == "clop":
                                 try:
@@ -742,10 +732,9 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                         stdlog(f"[{group_name}] Entry gate detected. Clicking...")
                                         await gate.click()
                                         await asyncio.sleep(5)
-                                        
                                         # Now it might be in a queue
                                         stdlog(f"[{group_name}] Waiting for content after gate (max 5 minutes)...")
-                                        # We need a selector for the actual content. 
+                                        # We need a selector for the actual content.
                                         # Since I don't have it, I'll wait for the queue to potentially finish or just wait a bit.
                                         # Usually these sites have a specific container for victims.
                                         # For now, let's wait for network idle or a long timeout.
@@ -765,7 +754,6 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                     # 2. Look for the checkbox element inside the iframe
                                     # Selector #challenge-stage or input[type="checkbox"]
                                     checkbox = cf_frame_locator.locator("#challenge-stage, input[type='checkbox']")
-                                    
                                     if await checkbox.count() > 0:
                                         stdlog(f"[{group_name}] Cloudflare Turnstile checkbox found. Clicking...")
                                         await asyncio.sleep(random.uniform(2, 5)) # Human-like delay
@@ -795,7 +783,6 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                             await page.mouse.move(x=500, y=400)
                             await page.mouse.wheel(delta_y=2000, delta_x=0)
                             await asyncio.sleep(5)
-                            
                         # Handle specific captchas
                         if not used_tor_fallback and AI_CAPTCHA_SOLVING_ENABLED and group_name.lower().replace(" ", "") == "thegentlemen":
                             try:
@@ -980,7 +967,6 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                         stdlog(f"[{group_name}] Header fingerprint: {location['http']['fingerprint']}")
                 except Exception as e:
                     errlog(f"[{group_name}] header fingerprint failed for {slug}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
-                
             else:
                 if verbose:
                     stdlog(f"[{group_name}] Skipping {slug} as the file is fresh.")
@@ -1039,6 +1025,8 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
                 stdlog(f"[{index}/{len(groups_to_scrape)}] Starting scrape for group: {group['name']}")
                 try:
                     await scrape_group(context, group, bypass_enabled_flag, verbose)
+                except (asyncio.CancelledError, TargetClosedError):
+                    raise
                 except Exception as e:
                     context._rl_stats["other_failures"] += 1
                     errlog(f"Fatal error scraping group {group['name']}: {e}")
@@ -1047,8 +1035,17 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
             # soon as scraping finishes, instead of being held during the cooldown.
             await asyncio.sleep(2)
 
-        tasks = [sem_scrape(group, i) for i, group in enumerate(groups_to_scrape, start=1)]
-        await asyncio.gather(*tasks)
+        tasks = [
+            asyncio.create_task(sem_scrape(group, i))
+            for i, group in enumerate(groups_to_scrape, start=1)
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         # Update original data
         for group in groups_to_scrape:
@@ -1174,7 +1171,6 @@ async def fetch_headers_via_tor(url: str, max_redirects: int = 5) -> Dict[str, A
                 result["final_url"] = str(resp.url)
                 result["status"] = status
                 result["http_version"] = http_ver
-                
                 try:
                     result["headers"] = headers
                     # Extract useful fields
@@ -1219,8 +1215,8 @@ if __name__ == "__main__":
       | |___     ___| |                      | |___________| |
       |_____|\_/|_____|                      |_______________|
         _|__|/ \|_|_.............X.............._|________|_
-       / ********** \                          / ********** \ 
-     /  ************  \   ransomware.live     /  ************  \ 
+       / ********** \                          / ********** \
+     /  ************  \   ransomware.live     /  ************  \
     --------------------                    --------------------
     '''
     )
@@ -1245,7 +1241,10 @@ if __name__ == "__main__":
             start_managed_tor()
         else:
             restart_tor_control_port(password=TOR_PWD)
-        asyncio.run(scrape_pages(args.group, args.bypass, args.verbose))
+        try:
+            asyncio.run(scrape_pages(args.group, args.bypass, args.verbose))
+        except KeyboardInterrupt:
+            stdlog("Scrape interrupted by user.")
     finally:
         if TOR_AUTO_MANAGE:
             stop_managed_tor()
