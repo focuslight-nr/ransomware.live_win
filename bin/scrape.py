@@ -55,6 +55,7 @@ TOR_PWD = os.getenv("TOR_PASSWORD")
 TOR_AUTO_MANAGE = os.getenv("TOR_AUTO_MANAGE", "false").strip().lower() == "true"
 TOR_BINARY_PATH = os.getenv("TOR_BINARY_PATH", "tor")
 TOR_TORRC_PATH = os.getenv("TOR_TORRC_PATH")
+TOR_BOOTSTRAP_TIMEOUT = int(os.getenv("TOR_BOOTSTRAP_TIMEOUT", "90"))
 SCRAPE_CONCURRENCY = int(os.getenv("SCRAPE_CONCURRENCY", "1"))
 PLAYWRIGHT_BROWSER = os.getenv('PLAYWRIGHT_BROWSER', 'firefox').lower()
 AUTO_SCREENSHOT_GROUPS = os.getenv('AUTO_SCREENSHOT_GROUPS', 'false').lower() == 'true'
@@ -416,7 +417,7 @@ def start_managed_tor():
 
 
             # Wait for Tor to initialize
-            max_retries = 30
+            max_retries = max(TOR_BOOTSTRAP_TIMEOUT, 1)
             for i in range(max_retries):
                 if managed_tor_process.poll() is not None:
                     raise Exception(f"Tor process exited unexpectedly with code {managed_tor_process.poll()}")
@@ -429,7 +430,9 @@ def start_managed_tor():
                 if i % 5 == 0 and i > 0:
                     stdlog("Waiting for Tor to initialize...")
                 time.sleep(1)
-            raise Exception("Timeout waiting for Tor to initialize")
+            raise Exception(
+                f"Timeout waiting for Tor to initialize after {TOR_BOOTSTRAP_TIMEOUT} seconds"
+            )
         except Exception as e:
             errlog(f"Failed to start managed Tor: {e}")
             log_tail = read_managed_tor_log_tail()
