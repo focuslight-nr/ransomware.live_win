@@ -31,9 +31,9 @@ def main():
     # Define the date format to convert to
     date_format = "%Y-%m-%d %H:%M:%S.%f"
 
-    ## Get the ransomware group name from the script name 
+    ## Get the ransomware group name from the script name
     script_path = os.path.abspath(__file__)
-    # If it's a symbolic link find the link source 
+    # If it's a symbolic link find the link source
     if os.path.islink(script_path):
         original_path = os.readlink(script_path)
         if not os.path.isabs(original_path):
@@ -41,7 +41,7 @@ def main():
         original_path = os.path.abspath(original_path)
         original_name = os.path.basename(original_path)
         group_name = original_name.replace('.py','')
-    # else get the script name 
+    # else get the script name
     else:
         script_name = os.path.basename(script_path)
         group_name = script_name.replace('.py','')
@@ -51,7 +51,15 @@ def main():
             html_doc=tmp_dir / filename
             file=open(html_doc, "r", encoding="utf-8", errors="ignore")
             soup = BeautifulSoup(file, "html.parser")
-            breaches = soup.find('ol').find_all('li')
+            breaches_root = soup.find('ol')
+            if breaches_root is None:
+                errlog(f"{group_name} - no ordered list found in file: {filename}")
+                continue
+
+            breaches = breaches_root.find_all('li')
+            if not breaches:
+                errlog(f"{group_name} - no breach entries found in file: {filename}")
+                continue
             for breach in breaches:
                 try:
                     title_tag = breach.find('h4').find('a')
@@ -66,8 +74,8 @@ def main():
                         size  = f"{leak_match.group(1)} {leak_match.group(2)}"
                         extra_infos = { 'data_size': size }
                     else:
-                        extra_infos = ''  
-                        
+                        extra_infos = ''
+
                     # Extracting date
                     date_tag = breach.find_all('b')
                     for tag in date_tag:
@@ -76,8 +84,7 @@ def main():
                             parsed_date = datetime.strptime(parsed_date, "%a %d %B %Y")
                             formatted_date = parsed_date.strftime("%Y-%m-%d %H:%M:%S.%f")
                             break
-                                   
-                        
+
                     # Extract country from tags
                     country_tags = breach.find('em').find_all('a')
                     countries = ', '.join(tag.text.strip('# ') for tag in country_tags)
