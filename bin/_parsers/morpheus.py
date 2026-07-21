@@ -63,14 +63,22 @@ def main():
                         published = ""
                         date_tag = post.find('span', class_='formatted-date')
                         if date_tag:
-                            date_str = date_tag.get_text(strip=True)
-                            # Format: "2026-01-29 21:07"
+                            # The site wraps the time in <i>, so use a separator to
+                            # preserve the whitespace between date and time.
+                            date_str = date_tag.get_text(" ", strip=True)
+                            match = re.search(r"(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?", date_str)
                             try:
-                                # Just take the date part or parse full
-                                clean_date = date_str.split(' ')[0] 
-                                dt = datetime.strptime(clean_date, "%Y-%m-%d")
+                                if match and match.group(2):
+                                    dt = datetime.strptime(
+                                        f"{match.group(1)} {match.group(2)}",
+                                        "%Y-%m-%d %H:%M",
+                                    )
+                                elif match:
+                                    dt = datetime.strptime(match.group(1), "%Y-%m-%d")
+                                else:
+                                    raise ValueError("date not found")
                                 published = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-                            except:
+                            except Exception:
                                 published = date_str
 
                         post_url = ""
