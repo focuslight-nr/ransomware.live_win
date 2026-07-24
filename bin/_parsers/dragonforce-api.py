@@ -42,6 +42,7 @@ proxies = {
     'http': 'socks5h://localhost:9050',
     'https': 'socks5h://localhost:9050'
 }
+DEFAULT_TIMEOUT = (30, 90)
 
 # Function to convert date format
 def convert_date_format(date_str):
@@ -61,7 +62,7 @@ def convert_date_format(date_str):
 
 def fetch_json_from_onion_url(onion_url):
     try:
-        response = requests.get(onion_url, proxies=proxies,verify=False)
+        response = requests.get(onion_url, proxies=proxies, verify=False, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()  # Check for any HTTP errors
         json_data = response.json()
         return json_data

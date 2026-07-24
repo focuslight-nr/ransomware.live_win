@@ -42,6 +42,7 @@ proxies = {
     'http': 'socks5h://localhost:9050',
     'https': 'socks5h://localhost:9050'
 }
+DEFAULT_TIMEOUT = (30, 90)
 def get_fqdns_from_json(filename, group_name):
     # Load the JSON data from the file
     with open(filename, "r", encoding="utf-8", errors="ignore") as file:
@@ -65,7 +66,7 @@ def get_fqdns_from_json(filename, group_name):
 
 def fetch_json_from_onion_url(onion_url):
     try:
-        response = requests.get(onion_url, proxies=proxies, verify=False)
+        response = requests.get(onion_url, proxies=proxies, verify=False, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()
         return json.loads(response.text)  # ✅ parsing manuel
     except requests.exceptions.RequestException as e:

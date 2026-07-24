@@ -25,6 +25,7 @@ proxies = {
     'http': 'socks5h://127.0.0.1:9050',
     'https': 'socks5h://127.0.0.1:9050',
 }
+DEFAULT_TIMEOUT = (30, 90)
 
 TARGET_GROUP = "lamashtu"
 PAGE_LIMIT   = 20
@@ -60,8 +61,12 @@ def parse_date(value: str) -> str:
 def fetch_posts_page(base_url: str, page: int) -> dict:
     url = f"{base_url}/api/posts"
     try:
-        resp = requests.get(url, params={"page": page, "limit": PAGE_LIMIT},
-                            proxies=proxies, timeout=(60, 60))
+        resp = requests.get(
+            url,
+            params={"page": page, "limit": PAGE_LIMIT},
+            proxies=proxies,
+            timeout=DEFAULT_TIMEOUT,
+        )
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
