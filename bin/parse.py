@@ -84,6 +84,14 @@ def start_managed_tor():
             if ":" in proxy_address:
                 socks_port = proxy_address.split(":")[-1]
 
+            # The scraper can leave a healthy managed Tor instance available
+            # while this parser starts. Reuse it instead of trying to bind the
+            # same SOCKS and control ports a second time.
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                if sock.connect_ex(("127.0.0.1", int(socks_port))) == 0:
+                    stdlog(f"Reusing existing Tor listener on SOCKS port {socks_port}")
+                    return
+
             cmd = [TOR_BINARY_PATH]
             torrc_path = resolve_torrc_path()
             if torrc_path:
