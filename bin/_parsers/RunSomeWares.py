@@ -56,7 +56,12 @@ def main():
                 for card in soup.find_all("div", class_="card"):
                     # Extract the company name
                     title_tag = card.find("h5", class_="card-title")
-                    victim = title_tag.text.strip() if title_tag else "Unknown"
+                    victim = title_tag.text.strip() if title_tag else ""
+
+                    # The listing uses empty cards as placeholders for paid or
+                    # unpublished entries. They are not victim records.
+                    if not victim:
+                        continue
 
                     # Extract the company description
                     desc_tag = card.find("p", class_="card-text")
