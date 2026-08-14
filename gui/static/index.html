@@ -198,6 +198,7 @@ h5 { color: var(--text); }
     <a class="nav-link" href="#" data-page="groups"><i class="bi bi-people"></i>Groups</a>
     <a class="nav-link" href="#" data-page="victims"><i class="bi bi-person-exclamation"></i>Victims</a>
     <a class="nav-link" href="#" data-page="runner"><i class="bi bi-play-circle"></i>Run Scrape/Parse</a>
+    <a class="nav-link" href="theme-editor.html" target="_blank"><i class="bi bi-palette"></i>Theme Editor</a>
   </nav>
   <div id="sidebar-footer">ransomware.live GUI</div>
 </div>
@@ -977,6 +978,19 @@ async function refreshJobs() {
 
 // ── init ───────────────────────────────────────────────────────────────────
 loadDashboard();
+
+// ── Theme sync ─────────────────────────────────────────────────────────────
+(function() {
+  function applyVars(vars) {
+    Object.entries(vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem('gui-theme-current'));
+    if (saved) applyVars(saved);
+  } catch {}
+  const ch = new BroadcastChannel('ransomware-gui-theme');
+  ch.onmessage = e => { if (e.data?.type === 'theme') applyVars(e.data.vars); };
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUI Theme Editor — ransomware.live_win</title>
+
+<style>
+/* ── Editor design tokens ─────────────────── */
+:root {
+  --ed-bg:        #f0eef8;
+  --ed-panel:     #ffffff;
+  --ed-border:    #dddae8;
+  --ed-text:      #1a182a;
+  --ed-text-2:    #6a6288;
+  --ed-accent:    #6c4eba;
+  --ed-accent-bg: rgba(108,78,186,.08);
+  --ed-mono:      ui-monospace, 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+  --ed-sans:      system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ed-bg:        #0c0b16;
+    --ed-panel:     #13111e;
+    --ed-border:    #221e38;
+    --ed-text:      #cec8e4;
+    --ed-text-2:    #766e98;
+    --ed-accent:    #9070c8;
+    --ed-accent-bg: rgba(144,112,200,.1);
+  }
+}
+:root[data-theme="dark"] {
+  --ed-bg:        #0c0b16;
+  --ed-panel:     #13111e;
+  --ed-border:    #221e38;
+  --ed-text:      #cec8e4;
+  --ed-text-2:    #766e98;
+  --ed-accent:    #9070c8;
+  --ed-accent-bg: rgba(144,112,200,.1);
+}
+
+/* ── Reset ────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--ed-sans);
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  overflow: hidden;
+}
+button { font-family: var(--ed-sans); cursor: pointer; }
+
+/* ── Header ───────────────────────────────── */
+header {
+  background: var(--ed-panel);
+  border-bottom: 1px solid var(--ed-border);
+  padding: 0 18px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.ed-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ed-text);
+  white-space: nowrap;
+}
+.ed-title code {
+  font-family: var(--ed-mono);
+  font-size: 10px;
+  color: var(--ed-accent);
+  font-weight: 400;
+  margin-left: 6px;
+  opacity: .85;
+}
+.divider { width: 1px; height: 20px; background: var(--ed-border); flex-shrink: 0; }
+.preset-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ed-text-2);
+  white-space: nowrap;
+}
+.presets { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; }
+.preset-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--ed-border);
+  background: transparent;
+  color: var(--ed-text-2);
+  transition: all .12s;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.preset-btn:hover {
+  background: var(--ed-accent-bg);
+  border-color: var(--ed-accent);
+  color: var(--ed-text);
+}
+.preset-btn.is-active {
+  background: var(--ed-accent);
+  border-color: var(--ed-accent);
+  color: #fff;
+}
+
+/* ── Custom preset chip ───────────────────── */
+.preset-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.preset-del {
+  font-size: 11px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--ed-border);
+  background: transparent;
+  color: var(--ed-text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; line-height: 1;
+  transition: all .12s;
+}
+.preset-del:hover { background: #c0392b; border-color: #c0392b; color: #fff; }
+
+/* ── Add-preset inline form ───────────────── */
+.add-preset-trigger {
+  font-size: 15px; line-height: 1;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--ed-border);
+  background: transparent;
+  color: var(--ed-text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; flex-shrink: 0;
+  transition: all .12s;
+}
+.add-preset-trigger:hover { border-color: var(--ed-accent); color: var(--ed-accent); }
+.add-preset-form {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+.add-preset-form.open { display: flex; }
+.add-preset-input {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-border);
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  width: 110px; outline: none;
+  font-family: var(--ed-sans);
+}
+.add-preset-input:focus { border-color: var(--ed-accent); }
+.add-preset-save {
+  font-size: 11px; padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-accent);
+  background: var(--ed-accent);
+  color: #fff; font-family: var(--ed-sans);
+  transition: opacity .12s;
+}
+.add-preset-save:hover { opacity: .85; }
+.add-preset-cancel {
+  font-size: 11px; padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-border);
+  background: transparent;
+  color: var(--ed-text-2); font-family: var(--ed-sans);
+}
+
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.reset-btn {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-border);
+  background: transparent;
+  color: var(--ed-text-2);
+  transition: all .12s;
+}
+.reset-btn:hover { border-color: var(--ed-text-2); color: var(--ed-text); }
+.back-link {
+  font-size: 11px;
+  color: var(--ed-text-2);
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-border);
+  transition: all .12s;
+}
+.back-link:hover { border-color: var(--ed-text-2); color: var(--ed-text); }
+
+/* ── Layout ───────────────────────────────── */
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  overflow: hidden;
+}
+
+/* ── Controls ─────────────────────────────── */
+.controls {
+  background: var(--ed-panel);
+  border-right: 1px solid var(--ed-border);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ed-border) transparent;
+}
+.controls::-webkit-scrollbar { width: 4px; }
+.controls::-webkit-scrollbar-thumb { background: var(--ed-border); border-radius: 2px; }
+
+.group-hd {
+  padding: 8px 14px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ed-text-2);
+  position: sticky;
+  top: 0;
+  background: var(--ed-panel);
+  z-index: 1;
+  border-bottom: 1px solid var(--ed-border);
+}
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--ed-border);
+  transition: background .1s;
+}
+.color-row:hover { background: var(--ed-accent-bg); }
+
+.swatch {
+  width: 28px; height: 28px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(128,128,128,.2);
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.swatch-bg { position: absolute; inset: 0; pointer-events: none; }
+.swatch input[type="color"] {
+  position: absolute; inset: 0;
+  opacity: 0; width: 100%; height: 100%;
+  cursor: pointer; border: none; padding: 0;
+}
+.color-info { flex: 1; min-width: 0; }
+.color-label { font-size: 12px; color: var(--ed-text); font-weight: 500; }
+.color-varname {
+  font-family: var(--ed-mono);
+  font-size: 9.5px;
+  color: var(--ed-accent);
+  margin-top: 1px;
+  opacity: .85;
+}
+.hex-input {
+  width: 76px;
+  font-family: var(--ed-mono);
+  font-size: 11.5px;
+  padding: 4px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--ed-border);
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  text-align: center;
+  outline: none;
+  flex-shrink: 0;
+  transition: border-color .12s;
+}
+.hex-input:focus { border-color: var(--ed-accent); }
+.hex-input.invalid { border-color: #e05050 !important; }
+
+/* ── Preview column ───────────────────────── */
+.preview-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.preview-hd {
+  padding: 9px 18px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ed-text-2);
+  border-bottom: 1px solid var(--ed-border);
+  background: var(--ed-panel);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #3a9c6a;
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+.preview-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* ── App preview ──────────────────────────── */
+#preview {
+  width: 100%;
+  max-width: 680px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ed-border);
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.15);
+}
+.pv-shell { display: flex; height: 420px; }
+
+.pv-sb {
+  width: 144px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.pv-brand {
+  padding: 12px 10px 9px;
+  border-bottom: 1px solid var(--border);
+}
+.pv-brand-name {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  color: var(--accent-hi);
+}
+.pv-brand-sub { font-size: 8px; color: var(--text-dim); margin-top: 2px; }
+.pv-nav { padding: 5px; display: flex; flex-direction: column; gap: 2px; }
+.pv-nav-item {
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+.pv-nav-item.is-on {
+  background: var(--bg-hover);
+  color: var(--accent-hi);
+  border-color: var(--border-hi);
+  box-shadow: inset 0 0 6px var(--accent-glow), 0 0 5px var(--accent-glow);
+}
+
+.pv-main {
+  flex: 1;
+  background: var(--bg);
+  overflow: hidden;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pv-h { font-size: 11px; font-weight: 600; color: var(--text); }
+
+.pv-cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+.pv-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px;
+}
+.pv-card-lbl {
+  font-size: 8px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 4px;
+}
+.pv-card-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pv-tbl-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pv-tbl { width: 100%; border-collapse: collapse; }
+.pv-tbl thead th {
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  padding: 5px 9px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.pv-tbl tbody td {
+  padding: 5px 9px;
+  color: var(--text);
+  font-size: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.pv-tbl tbody tr:last-child td { border-bottom: none; }
+.pv-tbl tbody tr.is-hover td { background: var(--bg-hover); }
+
+.pv-badge {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  border: 1px solid;
+}
+.pv-badge-grp { color: var(--accent-hi); border-color: var(--border-hi); }
+.pv-badge-err { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
+
+.pv-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pv-btn {
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid;
+  font-weight: 500;
+  font-family: inherit;
+}
+.pv-btn-pri { background: var(--accent); border-color: var(--border-hi); color: #fff; }
+.pv-btn-out { background: transparent; border-color: var(--border); color: var(--text-muted); }
+
+.pv-log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 9px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 9px;
+  line-height: 1.8;
+  flex-shrink: 0;
+}
+.pv-ok  { color: #70c8b0; }
+.pv-err { color: var(--danger); }
+.pv-std { color: var(--text-muted); }
+
+/* ── Footer ───────────────────────────────── */
+footer {
+  background: var(--ed-panel);
+  border-top: 1px solid var(--ed-border);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.css-preview {
+  flex: 1;
+  font-family: var(--ed-mono);
+  font-size: 10px;
+  color: var(--ed-text-2);
+  background: var(--ed-bg);
+  border: 1px solid var(--ed-border);
+  border-radius: 4px;
+  padding: 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 34px;
+  height: 34px;
+}
+.save-default-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--ed-border);
+  border-radius: 5px;
+  color: var(--ed-text-2);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--ed-sans);
+  transition: all .15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.save-default-btn:hover { border-color: var(--ed-accent); color: var(--ed-accent); }
+.save-default-btn.saved { border-color: #3a9c6a; color: #3a9c6a; }
+.copy-btn {
+  padding: 8px 16px;
+  background: var(--ed-accent);
+  border: none;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--ed-sans);
+  white-space: nowrap;
+  transition: opacity .15s, background .2s;
+  flex-shrink: 0;
+}
+.copy-btn:hover { opacity: .87; }
+.copy-btn.copied { background: #3a9c6a; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="ed-title">Theme Editor <code>gui/static/index.html</code></span>
+  <span class="divider"></span>
+  <span class="preset-label">Presets</span>
+  <div class="presets" id="presets"></div>
+  <button class="add-preset-trigger" id="add-preset-trigger" title="Save current colors as new preset">+</button>
+  <div class="add-preset-form" id="add-preset-form">
+    <input class="add-preset-input" id="add-preset-input" placeholder="Preset name…" maxlength="24">
+    <button class="add-preset-save" id="add-preset-save">Save</button>
+    <button class="add-preset-cancel" id="add-preset-cancel">✕</button>
+  </div>
+  <div class="header-right">
+    <button class="reset-btn" id="reset-btn">↺ Reset</button>
+    <a class="back-link" href="index.html">← Back to GUI</a>
+  </div>
+</header>
+
+<main>
+  <div class="controls" id="controls"></div>
+  <div class="preview-col">
+    <div class="preview-hd">
+      <span class="live-dot"></span>
+      Live Preview — changes apply to GUI in real time
+    </div>
+    <div class="preview-scroll">
+      <div id="preview">
+        <div class="pv-shell">
+          <div class="pv-sb">
+            <div class="pv-brand">
+              <div class="pv-brand-name">ransomware.live_win</div>
+              <div class="pv-brand-sub">OSINT GUI</div>
+            </div>
+            <div class="pv-nav">
+              <div class="pv-nav-item is-on">Dashboard</div>
+              <div class="pv-nav-item">Groups</div>
+              <div class="pv-nav-item">Victims</div>
+              <div class="pv-nav-item">Run Scrape/Parse</div>
+            </div>
+          </div>
+          <div class="pv-main">
+            <div class="pv-h">Dashboard</div>
+            <div class="pv-cards">
+              <div class="pv-card">
+                <div class="pv-card-lbl">Groups</div>
+                <div class="pv-card-num">264</div>
+              </div>
+              <div class="pv-card">
+                <div class="pv-card-lbl">Victims</div>
+                <div class="pv-card-num">3553</div>
+              </div>
+              <div class="pv-card">
+                <div class="pv-card-lbl">Parsers</div>
+                <div class="pv-card-num">211</div>
+              </div>
+            </div>
+            <div class="pv-tbl-wrap">
+              <table class="pv-tbl">
+                <thead>
+                  <tr><th>Victim</th><th>Group</th><th>Country</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Deutsche Bank</td>
+                    <td><span class="pv-badge pv-badge-grp">lockbit3</span></td>
+                    <td>DE</td>
+                  </tr>
+                  <tr class="is-hover">
+                    <td>Acme Corp</td>
+                    <td><span class="pv-badge pv-badge-grp">incransom</span></td>
+                    <td>US</td>
+                  </tr>
+                  <tr>
+                    <td>GlobalTech Ltd</td>
+                    <td><span class="pv-badge pv-badge-grp">qilin</span></td>
+                    <td>JP</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pv-row">
+              <span class="pv-badge pv-badge-err">3 disabled</span>
+              <button class="pv-btn pv-btn-pri">▶ Run</button>
+              <button class="pv-btn pv-btn-out">+ New Group</button>
+            </div>
+            <div class="pv-log">
+              <div class="pv-std">[09:01:33] Starting scrape for lockbit3…</div>
+              <div class="pv-ok">[09:01:35] Fetched 12 victims successfully</div>
+              <div class="pv-err">[09:01:36] Timeout: qilin .onion unreachable</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="css-preview" id="css-preview"></div>
+  <button class="save-default-btn" id="save-default-btn">Save as Default</button>
+  <button class="copy-btn" id="copy-btn">Copy CSS</button>
+</footer>
+
+<script>
+const VARS = [
+  { name: '--bg',         label: 'Page Background',  group: 'Background' },
+  { name: '--bg-panel',   label: 'Panel / Sidebar',  group: 'Background' },
+  { name: '--bg-card',    label: 'Card / Modal',      group: 'Background' },
+  { name: '--bg-hover',   label: 'Row Hover',         group: 'Background' },
+  { name: '--border',     label: 'Default Border',    group: 'Borders'    },
+  { name: '--border-hi',  label: 'Active Border',     group: 'Borders'    },
+  { name: '--accent',     label: 'Primary Accent',    group: 'Accent'     },
+  { name: '--accent-hi',  label: 'Accent Highlight',  group: 'Accent'     },
+  { name: '--danger',     label: 'Danger / Error',    group: 'Status'     },
+  { name: '--danger-bg',  label: 'Danger Background', group: 'Status'     },
+  { name: '--amber',      label: 'Numbers / Amber',   group: 'Status'     },
+  { name: '--text',       label: 'Body Text',         group: 'Text'       },
+  { name: '--text-dim',   label: 'Dim Text',          group: 'Text'       },
+  { name: '--text-muted', label: 'Muted / Secondary', group: 'Text'       },
+];
+
+const BUILTIN_PRESETS = {
+  Cyberpunk: {
+    '--bg':'#080818','--bg-panel':'#0f0d1e','--bg-card':'#131120','--bg-hover':'#1c1830',
+    '--border':'#2e2454','--border-hi':'#5a4090',
+    '--accent':'#9070c8','--accent-hi':'#b494e8',
+    '--danger':'#e05070','--danger-bg':'#2a0e1a','--amber':'#e87820',
+    '--text':'#c8c0e0','--text-dim':'#6a6088','--text-muted':'#8878a8',
+  },
+  Midnight: {
+    '--bg':'#060d18','--bg-panel':'#0a1220','--bg-card':'#0f1828','--bg-hover':'#162030',
+    '--border':'#1e3450','--border-hi':'#2e5090',
+    '--accent':'#4a90e2','--accent-hi':'#78b4f8',
+    '--danger':'#e06060','--danger-bg':'#280a0a','--amber':'#e8a030',
+    '--text':'#c0d0e8','--text-dim':'#486080','--text-muted':'#6080a0',
+  },
+  Forest: {
+    '--bg':'#060e0a','--bg-panel':'#0a1410','--bg-card':'#0e1a12','--bg-hover':'#162418',
+    '--border':'#1e3828','--border-hi':'#2e6040',
+    '--accent':'#3ab060','--accent-hi':'#60d888',
+    '--danger':'#e06050','--danger-bg':'#280a08','--amber':'#e8c030',
+    '--text':'#b0d8b8','--text-dim':'#406048','--text-muted':'#608068',
+  },
+  Ember: {
+    '--bg':'#100808','--bg-panel':'#180e0e','--bg-card':'#201414','--bg-hover':'#2a1818',
+    '--border':'#3c1c1c','--border-hi':'#7a2c2c',
+    '--accent':'#e05040','--accent-hi':'#f87060',
+    '--danger':'#f87820','--danger-bg':'#281408','--amber':'#f8b040',
+    '--text':'#e8c8c0','--text-dim':'#804840','--text-muted':'#a06858',
+  },
+};
+
+// ── Persistence ────────────────────────────────────────────────────────────
+const CUSTOM_KEY = 'gui-theme-presets';
+const DEFAULT_KEY = 'gui-theme-current';
+
+function loadCustomPresets() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || '{}'); } catch { return {}; }
+}
+function saveCustomPresets(obj) {
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify(obj));
+}
+function saveDefault(vars) {
+  localStorage.setItem(DEFAULT_KEY, JSON.stringify(vars));
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let current = { ...BUILTIN_PRESETS.Cyberpunk };
+let activePreset = 'Cyberpunk';
+
+// ── BroadcastChannel ───────────────────────────────────────────────────────
+const channel = new BroadcastChannel('ransomware-gui-theme');
+
+function broadcastTheme() {
+  const allVars = {};
+  VARS.forEach(v => { allVars[v.name] = current[v.name]; });
+  allVars['--accent-glow'] = hexToRgba(current['--accent'], 0.25);
+  allVars['--sidebar-w']   = '220px';
+  channel.postMessage({ type: 'theme', vars: allVars });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function hexToRgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function isValidHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
+
+// ── Apply to preview + broadcast ───────────────────────────────────────────
+function applyPreview() {
+  const pv = document.getElementById('preview');
+  VARS.forEach(v => pv.style.setProperty(v.name, current[v.name]));
+  pv.style.setProperty('--accent-glow', hexToRgba(current['--accent'], 0.25));
+  const badgeBg = hexToRgba(current['--accent'], 0.15);
+  document.querySelectorAll('.pv-badge-grp').forEach(el => { el.style.background = badgeBg; });
+  broadcastTheme();
+}
+
+// ── CSS output ─────────────────────────────────────────────────────────────
+function buildCSS() {
+  const glow = hexToRgba(current['--accent'], 0.25);
+  const pad = s => s.padEnd(16);
+  const lines = VARS.map(v => `  ${pad(v.name + ':')} ${current[v.name]};`);
+  lines.push(`  ${pad('--accent-glow:')} ${glow};`);
+  lines.push(`  ${pad('--sidebar-w:')} 220px;`);
+  return `:root {\n${lines.join('\n')}\n}`;
+}
+function refreshOutput() {
+  const css = buildCSS();
+  document.getElementById('css-preview').textContent =
+    css.replace(/\n\s+/g, '  ').replace(/\n}/,' }');
+}
+
+// ── Sync UI controls to state ──────────────────────────────────────────────
+function refreshControls() {
+  VARS.forEach(v => {
+    const bg = document.querySelector(`.swatch-bg[data-v="${v.name}"]`);
+    const cp = document.querySelector(`input[type="color"][data-v="${v.name}"]`);
+    const hi = document.querySelector(`.hex-input[data-v="${v.name}"]`);
+    if (bg) bg.style.background = current[v.name];
+    if (cp) cp.value = current[v.name];
+    if (hi) { hi.value = current[v.name]; hi.classList.remove('invalid'); }
+  });
+}
+
+// ── Build color control panel ──────────────────────────────────────────────
+function buildControls() {
+  const groups = [...new Set(VARS.map(v => v.group))];
+  document.getElementById('controls').innerHTML = groups.map(g =>
+    `<div class="group-hd">${g}</div>` +
+    VARS.filter(v => v.group === g).map(v => `
+      <div class="color-row">
+        <label class="swatch">
+          <div class="swatch-bg" data-v="${v.name}" style="background:${current[v.name]}"></div>
+          <input type="color" data-v="${v.name}" value="${current[v.name]}">
+        </label>
+        <div class="color-info">
+          <div class="color-label">${v.label}</div>
+          <div class="color-varname">${v.name}</div>
+        </div>
+        <input class="hex-input" data-v="${v.name}" value="${current[v.name]}"
+               maxlength="7" spellcheck="false" autocomplete="off">
+      </div>`).join('')
+  ).join('');
+
+  document.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const n = e.target.dataset.v;
+      current[n] = e.target.value;
+      const bg = document.querySelector(`.swatch-bg[data-v="${n}"]`);
+      const hi = document.querySelector(`.hex-input[data-v="${n}"]`);
+      if (bg) bg.style.background = e.target.value;
+      if (hi) { hi.value = e.target.value; hi.classList.remove('invalid'); }
+      applyPreview(); refreshOutput(); setActivePreset(null);
+    });
+  });
+
+  document.querySelectorAll('.hex-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      let val = e.target.value.trim();
+      if (!val.startsWith('#')) val = '#' + val;
+      if (isValidHex(val)) {
+        const n = e.target.dataset.v;
+        current[n] = val;
+        e.target.value = val;
+        e.target.classList.remove('invalid');
+        const bg = document.querySelector(`.swatch-bg[data-v="${n}"]`);
+        const cp = document.querySelector(`input[type="color"][data-v="${n}"]`);
+        if (bg) bg.style.background = val;
+        if (cp) cp.value = val;
+        applyPreview(); refreshOutput(); setActivePreset(null);
+      } else {
+        e.target.classList.add('invalid');
+      }
+    });
+    inp.addEventListener('blur', e => {
+      if (e.target.classList.contains('invalid')) {
+        e.target.value = current[e.target.dataset.v];
+        e.target.classList.remove('invalid');
+      }
+    });
+    inp.addEventListener('keydown', e => { if (e.key==='Enter') e.target.blur(); });
+  });
+}
+
+// ── Build preset buttons (built-in + custom) ───────────────────────────────
+function buildPresets() {
+  const custom = loadCustomPresets();
+  const container = document.getElementById('presets');
+
+  const builtinHtml = Object.keys(BUILTIN_PRESETS).map(name =>
+    `<button class="preset-btn${name===activePreset?' is-active':''}" data-p="${name}">${name}</button>`
+  ).join('');
+
+  const customHtml = Object.keys(custom).map(name =>
+    `<span class="preset-wrap">
+      <button class="preset-btn${name===activePreset?' is-active':''}" data-p="${name}" data-custom="1">${name}</button>
+      <button class="preset-del" data-del="${name}" title="Delete preset">×</button>
+    </span>`
+  ).join('');
+
+  container.innerHTML = builtinHtml + (customHtml ? '<span class="divider" style="margin:0 4px;"></span>' + customHtml : '');
+
+  container.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.p;
+      const all = { ...BUILTIN_PRESETS, ...loadCustomPresets() };
+      if (!all[name]) return;
+      current = { ...all[name] };
+      activePreset = name;
+      refreshControls(); applyPreview(); refreshOutput();
+      setActivePreset(name);
+    });
+  });
+
+  container.querySelectorAll('.preset-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.del;
+      const custom = loadCustomPresets();
+      delete custom[name];
+      saveCustomPresets(custom);
+      if (activePreset === name) activePreset = null;
+      buildPresets();
+    });
+  });
+}
+
+function setActivePreset(name) {
+  activePreset = name;
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    b.classList.toggle('is-active', b.dataset.p === name);
+  });
+}
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+document.getElementById('reset-btn').addEventListener('click', () => {
+  current = { ...BUILTIN_PRESETS.Cyberpunk };
+  refreshControls(); applyPreview(); refreshOutput(); setActivePreset('Cyberpunk');
+});
+
+// ── Save as Default ────────────────────────────────────────────────────────
+document.getElementById('save-default-btn').addEventListener('click', () => {
+  const allVars = {};
+  VARS.forEach(v => { allVars[v.name] = current[v.name]; });
+  allVars['--accent-glow'] = hexToRgba(current['--accent'], 0.25);
+  allVars['--sidebar-w']   = '220px';
+  saveDefault(allVars);
+  const btn = document.getElementById('save-default-btn');
+  btn.textContent = '✓ Saved!';
+  btn.classList.add('saved');
+  setTimeout(() => { btn.textContent = 'Save as Default'; btn.classList.remove('saved'); }, 2000);
+});
+
+// ── Copy CSS ───────────────────────────────────────────────────────────────
+document.getElementById('copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(buildCSS()).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy CSS'; btn.classList.remove('copied'); }, 2200);
+  });
+});
+
+// ── Add Preset inline form ─────────────────────────────────────────────────
+const addForm = document.getElementById('add-preset-form');
+const addInput = document.getElementById('add-preset-input');
+
+document.getElementById('add-preset-trigger').addEventListener('click', () => {
+  addForm.classList.add('open');
+  addInput.value = '';
+  addInput.focus();
+});
+document.getElementById('add-preset-cancel').addEventListener('click', () => {
+  addForm.classList.remove('open');
+});
+document.getElementById('add-preset-save').addEventListener('click', savePreset);
+addInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') savePreset();
+  if (e.key === 'Escape') addForm.classList.remove('open');
+});
+
+function savePreset() {
+  const name = addInput.value.trim();
+  if (!name) return;
+  const custom = loadCustomPresets();
+  custom[name] = { ...current };
+  saveCustomPresets(custom);
+  addForm.classList.remove('open');
+  activePreset = name;
+  buildPresets();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+// Load saved default if present
+try {
+  const saved = JSON.parse(localStorage.getItem(DEFAULT_KEY));
+  if (saved) {
+    VARS.forEach(v => { if (saved[v.name]) current[v.name] = saved[v.name]; });
+    activePreset = null;
+  }
+} catch {}
+
+buildControls();
+buildPresets();
+applyPreview();
+refreshOutput();
+</script>
+</body>
+</html>

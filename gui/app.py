@@ -51,6 +51,10 @@ async def handle_index(request: web.Request) -> web.Response:
     return web.FileResponse(STATIC_DIR / "index.html")
 
 
+async def handle_theme_editor(request: web.Request) -> web.Response:
+    return web.FileResponse(STATIC_DIR / "theme-editor.html")
+
+
 # ── groups API ──────────────────────────────────────────────────────────────
 
 async def api_groups_list(request: web.Request) -> web.Response:
@@ -448,6 +452,7 @@ async def api_jobs_list(request: web.Request) -> web.Response:
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/", handle_index)
+    app.router.add_get("/theme-editor.html", handle_theme_editor)
     app.router.add_static("/static", STATIC_DIR)
 
     # groups
