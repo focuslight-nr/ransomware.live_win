@@ -104,8 +104,14 @@ def stdlog(msg):
 def errlog(msg):
     logging.error(msg)
 
-# Load the pre-trained Haar Cascade classifier for face detection 
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Face detection is an optional post-processing feature.  Some OpenCV builds
+# (including the current Python 3.14 wheel) do not expose CascadeClassifier;
+# do not prevent scraping and parsing from starting in that case.
+face_cascade = None
+if hasattr(cv2, "CascadeClassifier"):
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+    )
 
 def check_image_for_face(image_path, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)):
     """
@@ -117,6 +123,10 @@ def check_image_for_face(image_path, scaleFactor=1.1, minNeighbors=5, minSize=(3
     :param minSize: Minimum size of detected objects (width, height).
     :return: Tuple (bool, str). True if a face is detected, False otherwise. Second value contains an error message or success status.
     """
+    if face_cascade is None:
+        errlog("OpenCV face detection is unavailable in this installation.")
+        return False
+
     try:
         # Attempt to load the image
         image_path = str(image_path)

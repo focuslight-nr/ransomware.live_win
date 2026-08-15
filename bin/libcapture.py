@@ -95,6 +95,10 @@ def blur_image(img_path: str, radius: int = 5):
     blurred.save(img_path)
 
 def detect_faces_and_blur(img_path: str) -> bool:
+    if not hasattr(cv2, "CascadeClassifier"):
+        print("[policy] OpenCV face detection unavailable; skipping face blur")
+        return False
+
     face_cascade = cv2.CascadeClassifier(HAAR_CASCADE_PATH)
     img = cv2.imread(img_path)
     if img is None:
