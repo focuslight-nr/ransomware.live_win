@@ -645,6 +645,14 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                 title, used_tor_fallback = await save_html_via_tor_fallback(
                                     group_name, slug, filename
                                 )
+                                if not used_tor_fallback:
+                                    # Playwright has no loaded document after a SOCKS connection
+                                    # failure.  Calling page.content() here only serializes its
+                                    # empty initial document and incorrectly marks the location as
+                                    # available.
+                                    raise RuntimeError(
+                                        f"Tor fallback failed after browser connection failure: {goto_error}"
+                                    )
 
                         # Dynamic wait logic for SPA rendering
                         if not used_tor_fallback and is_spa:
