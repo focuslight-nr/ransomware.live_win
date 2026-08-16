@@ -162,6 +162,9 @@ cython_debug/
 #.idea/
 #
 data/hudsonrock.json
+tmp/maintenance-pipeline.json
+tmp/maintenance-pipeline.json.tmp
+tmp/maintenance-pipeline.log
 data/groups.json
 data/victims.json
 data/eucert.json
