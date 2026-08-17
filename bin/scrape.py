@@ -881,7 +881,11 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                                     pass
 
                                 try:
-                                    content = await page.content()
+                                    # A page can keep navigating indefinitely after a successful
+                                    # goto.  Playwright's content() has no built-in timeout, so
+                                    # bound it to keep one hostile/broken site from stalling the
+                                    # complete maintenance pipeline.
+                                    content = await asyncio.wait_for(page.content(), timeout=60000)
                                     break
                                 except Exception as e:
                                     content_error = e
@@ -895,7 +899,7 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
 
                             if content is None:
                                 raise content_error
-                            title = await page.title()
+                            title = await asyncio.wait_for(page.title(), timeout=30000)
                             if verbose:
                                 stdlog(f"[{group_name}] Successfully got title for {slug}: {title}")
                             async with aiofiles.open(filename, "w", encoding="utf-8") as f:
