@@ -1,87 +1,51 @@
-"""
-    From Template v4 - 202412827
-    +----------------------------------------------+
-    | Description | Website | published | post URL |
-    +-----------------------+-----------+----------+
-    |       X     |         |           |     X    |
-    +-----------------------+-----------+----------+
-    Rappel : def appender(post_title, group_name, description="", website="", published="", post_url="", country="")
-"""
+"""Parser for Run Some Wares victim cards."""
 
-import os,datetime,sys,re
-from bs4 import BeautifulSoup
-from datetime import datetime
-from shared_utils import find_slug_by_md5, appender,extract_md5_from_filename, errlog
+import os
 from pathlib import Path
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# -------------------- CONFIG --------------------
-from shared_utils import appender, stdlog, errlog
-# Use robust path resolution for Windows/CLI consistency
-script_dir = Path(__file__).resolve().parent
-home = script_dir.parent.parent
-env_path = home / ".env"
-load_dotenv(dotenv_path=env_path)
+from shared_utils import appender, errlog, stdlog
 
-home_env = os.getenv("RANSOMWARELIVE_HOME", ".")
-tmp_dir = Path(home_env) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+load_dotenv(dotenv_path=Path("../.env"))
+home = os.getenv("RANSOMWARELIVE_HOME", ".")
+tmp_dir = Path(home + os.getenv("TMP_DIR", "/tmp/"))
 
 
 def main():
-
-    # Define the date format to convert to
-    date_format = "%Y-%m-%d %H:%M:%S.%f"
-    
-    ## Get the ransomware group name from the script name 
-    script_path = os.path.abspath(__file__)
-    # If it's a symbolic link find the link source 
-    if os.path.islink(script_path):
-        original_path = os.readlink(script_path)
-        if not os.path.isabs(original_path):
-            original_path = os.path.join(os.path.dirname(script_path), original_path)
-        original_path = os.path.abspath(original_path)
-        original_name = os.path.basename(original_path)
-        group_name = original_name.replace('.py','')
-    # else get the script name 
-    else:
-        script_name = os.path.basename(script_path)
-        group_name = script_name.replace('.py','')
-
-    for filename in os.listdir(tmp_dir):
+    group_name = "runsomewares"
+    for html_doc in tmp_dir.glob(f"{group_name}-*.html"):
+        stdlog(f"Parsing: {html_doc}")
         try:
-            if filename.startswith(group_name+'-'):
-                html_doc= tmp_dir / filename
-                file=open(html_doc, "r", encoding="utf-8", errors="ignore")
-                soup=BeautifulSoup(file,'html.parser')
-                for card in soup.find_all("div", class_="card"):
-                    # Extract the company name
-                    title_tag = card.find("h5", class_="card-title")
-                    victim = title_tag.text.strip() if title_tag else ""
+            soup = BeautifulSoup(html_doc.read_text(encoding="utf-8"), "html.parser")
+            for card in soup.select(".card"):
+                title = card.select_one(".card-title")
+                if not title:
+                    continue
+                victim = title.get_text(" ", strip=True)
+                if not victim:
+                    continue
 
-                    # The listing uses empty cards as placeholders for paid or
-                    # unpublished entries. They are not victim records.
-                    if not victim:
-                        continue
+                description = card.select_one(".card-text")
+                link = card.select_one("a.more-info-link[href]")
+                post_url = urljoin(
+                    "http://rnsmwareartse3m4hjsumjf222pnka6gad26cqxqmbjvevhbnym5p6ad.onion/",
+                    link["href"],
+                ) if link else ""
+                appender(
+                    victim,
+                    group_name,
+                    description.get_text(" ", strip=True) if description else "",
+                    "",
+                    "",
+                    post_url,
+                )
+        except Exception as error:
+            errlog(f"{group_name} - error reading {html_doc}: {error}")
 
-                    # Extract the company description
-                    desc_tag = card.find("p", class_="card-text")
-                    description = desc_tag.text.strip() if desc_tag else "No Description Available"
 
-                    # Extract the .onion URL
-                    link_tag = card.find("a", class_="more-info-link")
-                    post_url = link_tag["href"] if link_tag else "No URL"
-                
-                    #appender(name, group_name, description,website,created_formatted,link)
-
-                    appender(
-                        victim=victim,
-                        group_name=group_name,
-                        description=description,
-                        website='',  # Optional, leave empty or populate if relevant data exists
-                        published='',
-                        post_url=post_url,
-                        country=""  # Optional, leave empty or populate if relevant data exists
-                    )
-                file.close()
-        except Exception as e:
-            errlog(group_name + ' - parsing fail with error: ' + str(e) + 'in file:' + filename)
+if __name__ == "__main__":
+    main()
