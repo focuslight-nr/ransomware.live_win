@@ -1,6 +1,6 @@
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from shared_utils import stdlog, errlog, appender  # your own utilities
@@ -22,45 +22,18 @@ GROUP_NAME = "direwolf"  # <-- customize
 # -----------------------------
 # Utilities
 # -----------------------------
-import re
-from datetime import datetime
-
 def convert_timestamp(iso_timestamp):
-    """Convert ISO timestamps (including nanosecond precision) to microsecond-accurate:
-       'YYYY-MM-DD HH:MM:SS.xxxxxx'
-    """
+    """Normalize an ISO-8601 timestamp to the appender's naive UTC format."""
     if not iso_timestamp:
         return ""
 
-    ts = iso_timestamp
-
-    # ---- 1) Extract fractional seconds (if any) ----
-    m = re.search(r"\.(\d+)", ts)
-    if m:
-        frac = m.group(1)
-
-        # Normalize to microseconds → 6 digits
-        if len(frac) > 6:
-            frac = frac[:6]        # trim nanoseconds to microseconds
-        else:
-            frac = frac.ljust(6, "0")  # pad to 6 digits
-        
-        # Replace fractional part in the timestamp
-        ts = re.sub(r"\.\d+", f".{frac}", ts)
-
-    # ---- 2) Try parsing with timezone ----
-    fmts = [
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S.%fZ",
-        "%Y-%m-%dT%H:%M:%S.%f"
-    ]
-
-    for fmt in fmts:
-        try:
-            dt = datetime.strptime(ts, fmt)
-            return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
-        except ValueError:
-            continue
+    try:
+        dt = datetime.fromisoformat(iso_timestamp.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        pass
 
     errlog(f"[Timestamp] Failed to parse: {iso_timestamp}")
     return iso_timestamp
