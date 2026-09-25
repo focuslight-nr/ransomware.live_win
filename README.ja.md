@@ -180,7 +180,24 @@ pip install -r requirements-windows.txt
 playwright install firefox
 ```
 
-### 5. 環境設定
+### 5. Tor のインストール（システムバイナリ）
+
+スクレイパーは `.onion` サイトへのアクセスに Tor SOCKS5 プロキシを使用します。`tor` は **Python パッケージではなく、システムバイナリ**としてインストールする必要があります。
+
+**macOS**
+```bash
+brew install tor
+```
+
+**Linux (Debian/Ubuntu)**
+```bash
+sudo apt install tor
+```
+
+**Windows**
+[Tor Expert Bundle](https://www.torproject.org/download/tor/) をダウンロードし、`.env` の `TOR_BINARY_PATH` に `tor.exe` のパスを設定してください。`TOR_AUTO_MANAGE` を有効にすると自動的に起動・終了します。
+
+### 6. 環境設定
 ```bash
 cp .env.sample .env
 ```

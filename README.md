@@ -181,7 +181,24 @@ pip install -r requirements-windows.txt
 playwright install firefox
 ```
 
-### 5. Configure Environment
+### 5. Install Tor (system binary)
+
+The scraper routes `.onion` traffic through the Tor SOCKS5 proxy. `tor` must be installed as a **system binary** (it is not a Python package):
+
+**macOS**
+```bash
+brew install tor
+```
+
+**Linux (Debian/Ubuntu)**
+```bash
+sudo apt install tor
+```
+
+**Windows**
+Download the [Tor Expert Bundle](https://www.torproject.org/download/tor/) and set `TOR_BINARY_PATH` in `.env` to the path of `tor.exe`. The `TOR_AUTO_MANAGE` option will start/stop it automatically.
+
+### 6. Configure Environment
 ```bash
 cp .env.sample .env
 ```
