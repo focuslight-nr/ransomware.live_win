@@ -47,7 +47,7 @@ def main():
     for location in locations:
         slug = location.get('slug')
         if slug:
-            slug = f'{slug}static/data.js'
+            slug = f"{slug.rstrip('/')}/static/data.js"
             #print(f"Requesting data from: {slug}") 
                 
             # Make the request via Tor
