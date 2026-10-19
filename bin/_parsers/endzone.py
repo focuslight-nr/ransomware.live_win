@@ -21,7 +21,7 @@ def main():
         try:
             stdlog(f"Parsing: {html_doc}")
             soup = BeautifulSoup(html_doc.read_text(encoding="utf-8", errors="ignore"), "html.parser")
-            for item in soup.select("#leaks-page .glow-card"):
+            for item in soup.select("#leaks-page .glow-card, .cards-grid .glow-card"):
                 name = item.select_one(".company-name")
                 if not name:
                     continue
