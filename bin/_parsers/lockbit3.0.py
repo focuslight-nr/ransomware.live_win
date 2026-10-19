@@ -23,6 +23,24 @@ def main():
             try:
                 with open(html_doc, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'html.parser')
+
+                # Some LockBit mirrors expose their leaked companies as an
+                # Apache-style directory index rather than post cards.
+                directory_rows = soup.select('table#list tbody tr')
+                if directory_rows:
+                    url = find_slug_by_md5('lockbit 3.0', extract_md5_from_filename(filename))
+                    if not url:
+                        url = 'http://lockbit3753ekiocyo5epmpy6klmejchjtzddoekjlnt6mu3qh4de2id.onion'
+                    for row in directory_rows:
+                        link = row.select_one('td.link a[href]')
+                        if not link or not link['href'].endswith('/'):
+                            continue
+                        victim = link.get_text(' ', strip=True)
+                        if not victim or '.' not in victim:
+                            continue
+                        appender(victim, 'lockbit3', 'Leaked files directory', victim,
+                                 '', urljoin(url.rstrip('/') + '/', link['href']))
+                    continue
                 
                 # LockBit 3.0 uses post-block class for victims
                 post_blocks = soup.find_all('a', class_=lambda x: x and 'post-block' in x)
@@ -49,7 +67,7 @@ def main():
                         
                         link = block.get('href', "")
                         # Base URL from groups.json
-                        url = find_slug_by_md5('lockbit3', extract_md5_from_filename(filename))
+                        url = find_slug_by_md5('lockbit 3.0', extract_md5_from_filename(filename))
                         if not url:
                              url = 'http://lockbit3753ekiocyo5epmpy6klmejchjtzddoekjlnt6mu3qh4de2id.onion'
                         else:

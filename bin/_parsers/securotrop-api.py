@@ -135,7 +135,6 @@ def main():
             #    description_lines.append(details)
             description = "\n".join(description_lines).strip()
 
-            cid = (entry.get("id") or "").strip()
             post_url = URL
             published = time_added
             appender(
