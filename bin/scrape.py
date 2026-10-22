@@ -55,7 +55,7 @@ TOR_PWD = os.getenv("TOR_PASSWORD")
 TOR_AUTO_MANAGE = os.getenv("TOR_AUTO_MANAGE", "false").strip().lower() == "true"
 TOR_BINARY_PATH = os.getenv("TOR_BINARY_PATH", "tor")
 TOR_TORRC_PATH = os.getenv("TOR_TORRC_PATH")
-TOR_BOOTSTRAP_TIMEOUT = int(os.getenv("TOR_BOOTSTRAP_TIMEOUT", "90"))
+TOR_BOOTSTRAP_TIMEOUT = int(os.getenv("TOR_BOOTSTRAP_TIMEOUT", "180"))
 SCRAPE_CONCURRENCY = int(os.getenv("SCRAPE_CONCURRENCY", "1"))
 PLAYWRIGHT_BROWSER = os.getenv('PLAYWRIGHT_BROWSER', 'firefox').lower()
 AUTO_SCREENSHOT_GROUPS = os.getenv('AUTO_SCREENSHOT_GROUPS', 'false').lower() == 'true'
