@@ -37,7 +37,13 @@ def convert_date(date_str: str) -> str:
         except Exception:
             return ""
     mm, dd, yyyy = map(int, m.groups())
-    return f"{yyyy:04d}-{mm:02d}-{dd:02d} 00:00:00.000000"
+    # The source occasionally uses day/month/year when the day exceeds 12.
+    if mm > 12 and dd <= 12:
+        mm, dd = dd, mm
+    try:
+        return datetime(yyyy, mm, dd).strftime("%Y-%m-%d 00:00:00.000000")
+    except ValueError:
+        return ""
 
 def get_country_code(location):
     if not location:
