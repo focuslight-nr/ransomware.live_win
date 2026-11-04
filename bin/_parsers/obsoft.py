@@ -1,0 +1,63 @@
+import os
+from datetime import datetime
+from pathlib import Path
+
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+from shared_utils import appender, errlog, extract_md5_from_filename, find_slug_by_md5, stdlog
+
+
+project_root = Path(__file__).resolve().parents[2]
+load_dotenv(project_root / ".env")
+tmp_dir = Path(os.getenv("RANSOMWARELIVE_HOME", str(project_root))) / os.getenv("TMP_DIR", "tmp").strip("/")
+
+
+def main():
+    group_name = "obsoft"
+    for html_doc in tmp_dir.glob("obsoft-*.html"):
+        try:
+            stdlog(f"Parsing: {html_doc}")
+            slug = find_slug_by_md5(group_name, extract_md5_from_filename(html_doc.name))
+            if not slug:
+                errlog(f"{group_name} - no location found for {html_doc.name}")
+                continue
+            soup = BeautifulSoup(html_doc.read_text(encoding="utf-8", errors="ignore"), "html.parser")
+            for card in soup.select(".lb-grid .lb-card"):
+                if "lb-card-static" in card.get("class", []):
+                    continue
+                heading = card.select_one("h3")
+                if not heading:
+                    continue
+                victim = heading.get_text(" ", strip=True)
+                if not victim:
+                    continue
+                phase = card.select_one(".lb-phase")
+                updated = card.select_one(".lb-updated-text")
+                size = card.select_one(".lb-size span")
+                country = card.select_one(".lb-tip[data-tip]")
+                extra = {}
+                if phase:
+                    extra["status"] = phase.get_text(" ", strip=True)
+                if size:
+                    extra["size"] = size.get_text(" ", strip=True)
+                published = ""
+                if updated:
+                    try:
+                        published = datetime.strptime(updated.get_text(" ", strip=True), "%b %d, %Y %I:%M %p UTC").isoformat()
+                    except ValueError:
+                        pass
+                appender(
+                    victim=victim,
+                    group_name=group_name,
+                    post_url=slug,
+                    country="KR" if country and country.get("data-tip") == "South Korea" else "",
+                    published=published,
+                    extra_infos=extra,
+                )
+        except Exception as exc:
+            errlog(f"{group_name} - parsing failed for {html_doc.name}: {exc}")
+
+
+if __name__ == "__main__":
+    main()
