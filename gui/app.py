@@ -19,7 +19,8 @@ GROUPS_FILE = DB_DIR / "groups.json"
 VICTIMS_FILE = DB_DIR / "victims.json"
 BIN_DIR = PROJECT_ROOT / "bin"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-TMP_DIR = PROJECT_ROOT / os.getenv("TMP_DIR", "tmp").strip("/")
+_tmp_setting = Path(os.getenv("TMP_DIR", "tmp"))
+TMP_DIR = _tmp_setting if _tmp_setting.is_absolute() else PROJECT_ROOT / _tmp_setting
 
 _running_jobs: dict[str, dict] = {}
 
@@ -387,6 +388,10 @@ async def api_maintenance_review(request: web.Request) -> web.Response:
                                       "reason": "Review artifacts are not from the latest run",
                                       "pipeline": state})
         review = build_review_report(manifest, parsers)
+    except FileNotFoundError:
+        return web.json_response({"available": False,
+                                  "reason": "This run has no parser review report yet",
+                                  "pipeline": state})
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return web.json_response({"available": False,
                                   "reason": f"Review artifacts unavailable: {exc}",

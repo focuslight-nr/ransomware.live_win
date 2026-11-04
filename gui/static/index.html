@@ -184,6 +184,18 @@ h5 { color: var(--text); }
 
 /* ── Sidebar footer ───────────────────────── */
 #sidebar-footer { padding:.8rem 1rem; color: var(--text-dim); font-size:.72rem; border-top:1px solid var(--border); }
+@media (max-width: 767px) {
+  #sidebar { position:sticky; top:0; bottom:auto; width:100%; min-height:0; display:block; }
+  #sidebar .brand { padding:.5rem .8rem; }
+  #sidebar .brand small, #sidebar-footer { display:none; }
+  #sidebar nav { display:flex; flex-direction:row !important; overflow-x:auto; white-space:nowrap; padding:.25rem; }
+  #sidebar .nav-link { margin:0 .1rem; padding:.4rem .55rem; }
+  #main { margin-left:0; padding:1rem .7rem; }
+  .stat-card { padding:.85rem; }
+  .stat-card .num { font-size:1.55rem; }
+}
+.review-truncate { max-width:28rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.review-error { max-width:38rem; white-space:pre-wrap; overflow-wrap:anywhere; }
 </style>
 </head>
 <body>
@@ -453,8 +465,13 @@ h5 { color: var(--text); }
     <h5 class="mb-0"><i class="bi bi-clipboard-data me-2"></i>Parser Review</h5>
     <button class="btn btn-sm btn-outline-secondary" id="review-refresh">Refresh</button>
   </div>
-  <div id="review-state" class="text-secondary mb-3">Loading…</div>
+  <div id="review-state" class="stat-card text-secondary mb-3">Loading…</div>
   <div id="review-content" class="d-none">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <label for="review-search" class="small text-secondary">Find in results</label>
+      <input id="review-search" type="search" class="form-control form-control-sm search-box" placeholder="Group, parser, URL, error…">
+      <button class="btn btn-sm btn-outline-secondary" id="review-clear">Clear</button>
+    </div>
     <div class="row g-3 mb-3">
       <div class="col-md-3"><div class="stat-card"><div class="text-secondary">Fetched pages</div><div class="num" id="review-fetched">0</div></div></div>
       <div class="col-md-3"><div class="stat-card"><div class="text-secondary">Uncovered candidates</div><div class="num" id="review-candidates-count">0</div></div></div>
@@ -467,12 +484,12 @@ h5 { color: var(--text); }
       <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Group</th><th>URL</th><th>Saved HTML</th></tr></thead><tbody id="review-candidates"></tbody></table></div>
     </div>
     <div class="stat-card mb-3">
-      <div class="d-flex align-items-center justify-content-between mb-2"><h6 class="mb-0">Parser results</h6>
+      <div class="d-flex align-items-center justify-content-between mb-2"><h6 class="mb-0">Parser results <span id="review-parser-visible" class="text-secondary small"></span></h6>
         <select class="form-select form-select-sm w-auto" id="review-parser-filter"><option value="issues">Issues</option><option value="all">All parsers</option></select></div>
       <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Parser</th><th>Status</th><th>Reason</th><th>Detected</th><th>Added</th><th>Details</th></tr></thead><tbody id="review-parsers"></tbody></table></div>
     </div>
     <div class="stat-card">
-      <div class="d-flex align-items-center justify-content-between mb-2"><h6 class="mb-0">Scrape locations</h6>
+      <div class="d-flex align-items-center justify-content-between mb-2"><h6 class="mb-0">Scrape locations <span id="review-location-visible" class="text-secondary small"></span></h6>
         <select class="form-select form-select-sm w-auto" id="review-location-filter"><option value="all">All locations</option><option value="succeeded">Fetched</option><option value="network_failure">Network failures</option><option value="other_failure">Other failures</option><option value="cached">Cached</option><option value="disabled">Disabled</option></select></div>
       <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Group</th><th>Status</th><th>URL</th><th>Saved HTML / error</th></tr></thead><tbody id="review-locations"></tbody></table></div>
     </div>
@@ -519,22 +536,26 @@ function barChart(containerId, data, labelKey, valueKey, color='#e05252') {
 }
 
 // ── navigation ─────────────────────────────────────────────────────────────
-const pages = {};
-document.querySelectorAll('[data-page]').forEach(link => {
-  link.addEventListener('click', e => {
-    e.preventDefault();
-    const name = link.dataset.page;
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
-    document.getElementById('page-'+name).classList.add('active');
-    link.classList.add('active');
-    if (name === 'dashboard') loadDashboard();
-    if (name === 'groups') loadGroups();
-    if (name === 'victims') loadVictims();
-    if (name === 'runner') loadRunnerGroups();
-    if (name === 'review') loadReview();
-  });
-});
+const pageNames = new Set(['dashboard', 'groups', 'victims', 'runner', 'review']);
+function showPage(name) {
+  if (!pageNames.has(name)) name = 'dashboard';
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelector(`[data-page="${name}"]`).classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'groups') loadGroups();
+  if (name === 'victims') loadVictims();
+  if (name === 'runner') loadRunnerGroups();
+  if (name === 'review') loadReview();
+}
+document.querySelectorAll('[data-page]').forEach(link => link.addEventListener('click', e => {
+  e.preventDefault();
+  const name = link.dataset.page;
+  if (location.hash === `#${name}`) showPage(name);
+  else location.hash = name;
+}));
+window.addEventListener('hashchange', () => showPage(location.hash.slice(1)));
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
 async function loadDashboard() {
@@ -889,10 +910,8 @@ async function loadRunnerGroups() {
 
 async function runAction(action, groupName, runBothAfter=false) {
   // switch to runner page
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('[data-page]').forEach(l=>l.classList.remove('active'));
-  document.getElementById('page-runner').classList.add('active');
-  document.querySelector('[data-page="runner"]').classList.add('active');
+  showPage('runner');
+  location.hash = 'runner';
   await loadRunnerGroups();
   document.getElementById('run-group').value = groupName;
   document.querySelector(`input[name="run-action"][value="${action}"]`).checked = true;
@@ -1012,19 +1031,36 @@ async function refreshJobs() {
 
 // ── maintenance review ─────────────────────────────────────────────────────
 let reviewData = null;
+function reviewQuery() { return document.getElementById('review-search').value.trim().toLowerCase(); }
 function reviewHtmlLink(x) {
   if (!x.html_path || !x.url) return esc(x.html_path || x.error);
   const query = new URLSearchParams({group: x.group, url: x.url});
-  return `<a href="/api/maintenance-review/html?${esc(query.toString())}" target="_blank" rel="noopener">${esc(x.html_path)}</a>`;
+  const filename = x.html_path.split(/[\\/]/).pop();
+  return `<a href="/api/maintenance-review/html?${esc(query.toString())}" title="${esc(x.html_path)}" target="_blank" rel="noopener">${esc(filename)} <i class="bi bi-box-arrow-up-right"></i></a>`;
+}
+function reviewStatus(status) {
+  const color = status === 'succeeded' || status === 'completed' ? 'success'
+    : status === 'network_failure' || status === 'cached' ? 'secondary'
+    : status === 'disabled' ? 'warning text-dark' : 'danger';
+  return `<span class="badge bg-${color}">${esc(status)}</span>`;
+}
+function reviewErrorCell(x) {
+  if (x.html_path) return reviewHtmlLink(x);
+  if (!x.error) return '';
+  const first = x.error.length > 110 ? x.error.slice(0, 110) + '…' : x.error;
+  return `<details><summary class="review-truncate">${esc(first)}</summary><pre class="small text-secondary review-error">${esc(x.error)}</pre></details>`;
 }
 async function loadReview() {
+  reviewData = null;
   const state = document.getElementById('review-state');
   state.textContent = 'Loading…';
   document.getElementById('review-content').classList.add('d-none');
   try {
     const data = await api('GET', '/api/maintenance-review');
     if (!data.available) {
-      state.textContent = data.reason;
+      const finished = data.pipeline?.finished_at;
+      state.innerHTML = `<div class="fw-semibold mb-1">${esc(data.reason)}</div>
+        <div class="small">${finished ? 'Last run: ' + esc(new Date(finished).toLocaleString()) + '. ' : ''}Review details will appear after the next complete maintenance run.</div>`;
       return;
     }
     reviewData = data;
@@ -1036,40 +1072,63 @@ async function loadReview() {
     document.getElementById('review-candidates-count').textContent = candidates.length;
     document.getElementById('review-issues-count').textContent = data.review.parser_issues.length;
     document.getElementById('review-added').textContent = parsers.reduce((n, x) => n + (x.victims_added || 0), 0);
-    document.getElementById('review-candidates').innerHTML = candidates.length
-      ? candidates.map(x => `<tr><td>${esc(x.group)}</td><td>${esc(x.url)}</td><td>${reviewHtmlLink(x)}</td></tr>`).join('')
-      : '<tr><td colspan="3" class="text-secondary">No name-only candidates</td></tr>';
     document.getElementById('review-content').classList.remove('d-none');
+    renderReviewCandidates();
     renderReviewParsers();
     renderReviewLocations();
   } catch (error) {
     state.textContent = `Could not load review: ${error.message}`;
   }
 }
+function renderReviewCandidates() {
+  if (!reviewData) return;
+  const q = reviewQuery();
+  const rows = reviewData.review.uncovered_candidates.filter(x =>
+    !q || `${x.group} ${x.url} ${x.html_path}`.toLowerCase().includes(q));
+  document.getElementById('review-candidates').innerHTML = rows.length
+    ? rows.map(x => `<tr><td>${esc(x.group)}</td><td class="review-truncate" title="${esc(x.url)}">${esc(x.url)}</td><td>${reviewHtmlLink(x)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="text-secondary">No matching candidates</td></tr>';
+}
 function renderReviewParsers() {
   if (!reviewData) return;
   const filter = document.getElementById('review-parser-filter').value;
-  const rows = reviewData.parser_results.parsers.filter(x => filter === 'all' || x.status !== 'completed');
+  const q = reviewQuery();
+  const rows = reviewData.parser_results.parsers.filter(x =>
+    (filter === 'all' || x.status !== 'completed') &&
+    (!q || `${x.parser} ${x.status} ${(x.error_reasons || []).join(' ')} ${(x.errors || []).join(' ')}`.toLowerCase().includes(q)));
+  document.getElementById('review-parser-visible').textContent = `(${rows.length})`;
   document.getElementById('review-parsers').innerHTML = rows.length ? rows.map(x => {
     const errors = (x.errors || []).join('\n');
     const details = errors ? `<details><summary>View</summary><pre class="small text-secondary text-wrap">${esc(errors)}</pre></details>` : '';
-    return `<tr><td>${esc(x.parser)}</td><td>${esc(x.status)}</td><td>${esc((x.error_reasons || []).join(', '))}</td><td>${x.victims_detected || 0}</td><td>${x.victims_added || 0}</td><td>${details}</td></tr>`;
-  }).join('') : '<tr><td colspan="6" class="text-secondary">No parser issues</td></tr>';
+    return `<tr><td>${esc(x.parser)}</td><td>${reviewStatus(x.status)}</td><td>${esc((x.error_reasons || []).join(', '))}</td><td>${x.victims_detected || 0}</td><td>${x.victims_added || 0}</td><td>${details}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="text-secondary">No matching parser results</td></tr>';
 }
 function renderReviewLocations() {
   if (!reviewData) return;
   const filter = document.getElementById('review-location-filter').value;
-  const rows = reviewData.manifest.locations.filter(x => filter === 'all' || x.status === filter);
+  const q = reviewQuery();
+  const rows = reviewData.manifest.locations.filter(x =>
+    (filter === 'all' || x.status === filter) &&
+    (!q || `${x.group} ${x.status} ${x.url || ''} ${x.error || ''}`.toLowerCase().includes(q)));
+  document.getElementById('review-location-visible').textContent = `(${rows.length})`;
   document.getElementById('review-locations').innerHTML = rows.length ? rows.map(x =>
-    `<tr><td>${esc(x.group)}</td><td>${esc(x.status)}</td><td>${esc(x.url)}</td><td class="text-break">${reviewHtmlLink(x)}</td></tr>`
+    `<tr><td>${esc(x.group)}</td><td>${reviewStatus(x.status)}</td><td class="review-truncate" title="${esc(x.url)}">${esc(x.url)}</td><td>${reviewErrorCell(x)}</td></tr>`
   ).join('') : '<tr><td colspan="4" class="text-secondary">No matching locations</td></tr>';
 }
 document.getElementById('review-refresh').addEventListener('click', loadReview);
+document.getElementById('review-search').addEventListener('input', () => {
+  renderReviewCandidates(); renderReviewParsers(); renderReviewLocations();
+});
+document.getElementById('review-clear').addEventListener('click', () => {
+  document.getElementById('review-search').value = '';
+  renderReviewCandidates(); renderReviewParsers(); renderReviewLocations();
+  document.getElementById('review-search').focus();
+});
 document.getElementById('review-parser-filter').addEventListener('change', renderReviewParsers);
 document.getElementById('review-location-filter').addEventListener('change', renderReviewLocations);
 
 // ── init ───────────────────────────────────────────────────────────────────
-loadDashboard();
+showPage(location.hash.slice(1) || 'dashboard');
 
 // ── Theme sync ─────────────────────────────────────────────────────────────
 (function() {
