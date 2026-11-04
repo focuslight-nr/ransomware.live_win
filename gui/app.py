@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aiohttp import web
+from bin.review_acquisition import report as build_review_report
 
 PORT = 8080
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -18,6 +19,7 @@ GROUPS_FILE = DB_DIR / "groups.json"
 VICTIMS_FILE = DB_DIR / "victims.json"
 BIN_DIR = PROJECT_ROOT / "bin"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+TMP_DIR = PROJECT_ROOT / os.getenv("TMP_DIR", "tmp").strip("/")
 
 _running_jobs: dict[str, dict] = {}
 
@@ -366,6 +368,61 @@ async def api_parsers_list(request: web.Request) -> web.Response:
     return web.json_response(names)
 
 
+async def api_maintenance_review(request: web.Request) -> web.Response:
+    """Return only artifacts belonging to the latest completed pipeline."""
+    state_path = TMP_DIR / "maintenance-pipeline.json"
+    if not state_path.exists():
+        return web.json_response({"available": False, "reason": "No maintenance run recorded"})
+    try:
+        state = _load_json(state_path)
+        if state.get("status") != "succeeded":
+            return web.json_response({"available": False,
+                                      "reason": "Latest maintenance run is not complete",
+                                      "pipeline": state})
+        manifest = _load_json(TMP_DIR / "scrape-manifest.json")
+        parsers = _load_json(TMP_DIR / "parser-results.json")
+        run_id = state.get("started_at")
+        if not run_id or manifest.get("run_id") != run_id or parsers.get("run_id") != run_id:
+            return web.json_response({"available": False,
+                                      "reason": "Review artifacts are not from the latest run",
+                                      "pipeline": state})
+        review = build_review_report(manifest, parsers)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return web.json_response({"available": False,
+                                  "reason": f"Review artifacts unavailable: {exc}",
+                                  "pipeline": state})
+    return web.json_response({"available": True, "pipeline": state,
+                              "manifest": manifest, "parser_results": parsers,
+                              "review": review})
+
+
+async def api_review_html(request: web.Request) -> web.Response:
+    """Show a saved page as inert text, restricted to the latest run's manifest."""
+    try:
+        state = _load_json(TMP_DIR / "maintenance-pipeline.json")
+        manifest = _load_json(TMP_DIR / "scrape-manifest.json")
+    except (OSError, ValueError):
+        raise web.HTTPNotFound(text="Review artifacts unavailable")
+    if state.get("status") != "succeeded" or manifest.get("run_id") != state.get("started_at"):
+        raise web.HTTPNotFound(text="No completed matching run")
+    group = request.rel_url.query.get("group")
+    url = request.rel_url.query.get("url")
+    location = next((item for item in manifest.get("locations", [])
+                     if item.get("group") == group and item.get("url") == url
+                     and item.get("status") == "succeeded"), None)
+    if not location or not location.get("html_path"):
+        raise web.HTTPNotFound(text="Saved HTML not found")
+    path = Path(location["html_path"]).resolve()
+    if not path.is_relative_to(TMP_DIR.resolve()):
+        raise web.HTTPForbidden(text="HTML path outside tmp")
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raise web.HTTPNotFound(text="Saved HTML unavailable")
+    return web.Response(text=content, content_type="text/plain", charset="utf-8",
+                        headers={"X-Content-Type-Options": "nosniff"})
+
+
 # ── runner API ───────────────────────────────────────────────────────────────
 
 async def api_run(request: web.Request) -> web.Response:
@@ -474,6 +531,8 @@ def create_app() -> web.Application:
     # stats
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/api/parsers", api_parsers_list)
+    app.router.add_get("/api/maintenance-review", api_maintenance_review)
+    app.router.add_get("/api/maintenance-review/html", api_review_html)
 
     # runner
     app.router.add_post("/api/run", api_run)
