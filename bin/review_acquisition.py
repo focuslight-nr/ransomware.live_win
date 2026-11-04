@@ -11,7 +11,14 @@ TMP = ROOT / "tmp"
 PARSERS = ROOT / "bin" / "_parsers"
 
 # Add only verified group/parser aliases here. API parsers are handled by suffix.
-ALIASES = {}
+ALIASES = {
+    "apos security": ["apos"],
+    "crazy hunter team": ["crazyhunter-api"],
+    "hunters international": ["hunters-api"],
+    "j group": ["J"],
+    "kawa": ["kawa4096"],
+    "mamona ransomware": ["mamona-api"],
+}
 
 
 def key(name):

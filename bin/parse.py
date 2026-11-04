@@ -15,6 +15,7 @@ import time
 import threading
 # For logging the time
 import json
+import re
 from datetime import datetime
 import subprocess
 import socket
@@ -218,6 +219,23 @@ def remove_lock_file():
         lock_file_path.unlink()
         stdlog("Previous lock removed.")
 
+
+def classify_parser_error(message):
+    """Classify evidence, without treating a missing page as a code regression."""
+    text = str(message).lower()
+    if any(marker in text for marker in ("token not set", "missing credential", "unauthorized", "http 401")):
+        return "credentials"
+    if any(marker in text for marker in ("http 403", "403 client error", "forbidden")):
+        return "http_403"
+    if any(marker in text for marker in ("http 404", "404 client error", "not found for url")):
+        return "http_404"
+    if any(marker in text for marker in ("socks", "connection", "timed out", "timeout", "host unreachable")):
+        return "network"
+    if (re.search(r"\bno .{1,60} found\b", text)
+            or any(marker in text for marker in ("no cards", "no articles", "no victim", "not found in", "object not found", "no data in json", "no ordered list", "no leak-item"))):
+        return "missing_structure"
+    return "unclassified"
+
 def execute_main(file_path, execution_data, run_date, results=None):
     """
     Dynamically imports a Python file, executes its `main` function, and logs execution time.
@@ -231,8 +249,10 @@ def execute_main(file_path, execution_data, run_date, results=None):
     started = time.time()
     errors = []
     added = {}
+    detected = {}
     original_errlog = shared_utils.errlog
     original_hook = shared_utils.APPENDER_ADDED_HOOK
+    original_seen_hook = shared_utils.APPENDER_SEEN_HOOK
 
     def record_error(message):
         errors.append(str(message))
@@ -241,8 +261,12 @@ def execute_main(file_path, execution_data, run_date, results=None):
     def record_added(group_name):
         added[group_name] = added.get(group_name, 0) + 1
 
+    def record_seen(group_name):
+        detected[group_name] = detected.get(group_name, 0) + 1
+
     shared_utils.errlog = record_error
     shared_utils.APPENDER_ADDED_HOOK = record_added
+    shared_utils.APPENDER_SEEN_HOOK = record_seen
     status = "completed"
     try:
         module_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -283,13 +307,18 @@ def execute_main(file_path, execution_data, run_date, results=None):
     finally:
         shared_utils.errlog = original_errlog
         shared_utils.APPENDER_ADDED_HOOK = original_hook
+        shared_utils.APPENDER_SEEN_HOOK = original_seen_hook
         if status == "completed" and errors:
             status = "reported_error"
         if results is not None:
             results.append({"parser": module_name, "status": status,
                             "duration_seconds": round(time.time() - started, 2),
+                            "victims_detected": sum(detected.values()),
+                            "groups_detected": detected,
                             "victims_added": sum(added.values()),
-                            "groups_added": added, "errors": errors})
+                            "groups_added": added, "errors": errors,
+                            "error_reasons": sorted({classify_parser_error(error)
+                                                     for error in errors})})
 
 def main():
     """

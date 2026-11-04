@@ -811,6 +811,7 @@ def existingpost(post_title, group_name):
 
 
 APPENDER_ADDED_HOOK = None
+APPENDER_SEEN_HOOK = None
 
 
 def appender(victim,group_name,description='',website='', published='', post_url='',country='',extra_infos=[]):
@@ -823,6 +824,8 @@ def appender(victim,group_name,description='',website='', published='', post_url
         victim = victim[:90] + '...'
     victim = html.unescape(victim)
     victim = clean_title(victim)
+    if APPENDER_SEEN_HOOK is not None:
+        APPENDER_SEEN_HOOK(group_name)
     if os.path.exists("exceptions.lst") and isexception(victim, group_name):
         # stdlog('Exception found for ' + victim)
         return
