@@ -915,6 +915,9 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                         "enabled": True,
                     })
                     stats["locations_succeeded"] += 1
+                    context._rl_manifest.append({"group": group_name, "url": slug,
+                                                 "html_path": str(filename), "status": "succeeded",
+                                                 "error": None})
                     if verbose:
                         stdlog(f"[{group_name}] Successfully scraped {slug}")
 
@@ -949,10 +952,15 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                     })
                     if is_tolerated_network_error(message):
                         stats["network_failures"] += 1
+                        failure_status = "network_failure"
                         stdlog(f"[{group_name}] Tolerated network failure for {slug}: {message}")
                     else:
                         stats["other_failures"] += 1
+                        failure_status = "other_failure"
                         errlog(f"[{group_name}] Error scraping {slug}: {message}")
+                    context._rl_manifest.append({"group": group_name, "url": slug,
+                                                 "html_path": None, "status": failure_status,
+                                                 "error": message})
                     # Disable location if offline for more than the threshold days
                     days = 30
                     if offline_for_more_than(location.get("updated", now), days):
@@ -983,8 +991,15 @@ async def scrape_group(context, group, bypass_enabled_flag, verbose):
                 except Exception as e:
                     errlog(f"[{group_name}] header fingerprint failed for {slug}: {str(e).splitlines()[0] if str(e).splitlines() else str(e)}")
             else:
+                context._rl_manifest.append({"group": group_name, "url": slug,
+                                             "html_path": str(filename), "status": "cached",
+                                             "error": None})
                 if verbose:
                     stdlog(f"[{group_name}] Skipping {slug} as the file is fresh.")
+        else:
+            context._rl_manifest.append({"group": group_name, "url": slug,
+                                         "html_path": None, "status": "disabled",
+                                         "error": None})
 
 async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
     async with async_playwright() as p:
@@ -1012,6 +1027,7 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
             "network_failures": 0,
             "other_failures": 0,
         }
+        context._rl_manifest = []
 
         await context.set_extra_http_headers({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -1045,6 +1061,9 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
                 except Exception as e:
                     context._rl_stats["other_failures"] += 1
                     errlog(f"Fatal error scraping group {group['name']}: {e}")
+                    context._rl_manifest.append({"group": group["name"], "url": None,
+                                                 "html_path": None, "status": "fatal",
+                                                 "error": str(e)})
             # Short pause between groups to let Tor circuits breathe.
             # Kept OUTSIDE the semaphore so the concurrency slot is released as
             # soon as scraping finishes, instead of being held during the cooldown.
@@ -1076,6 +1095,16 @@ async def scrape_pages(group_to_parse, bypass_enabled_flag, verbose=False):
             stdlog("Updated groups.json")
 
         stats = context._rl_stats
+        manifest_path = tmp_dir / "scrape-manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest = {"run_id": os.getenv("MAINTENANCE_RUN_ID"),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "locations": sorted(context._rl_manifest,
+                                        key=lambda item: (item["group"], item["url"] or ""))}
+        temporary_path = manifest_path.with_suffix(".json.tmp")
+        temporary_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+                                  encoding="utf-8")
+        temporary_path.replace(manifest_path)
         stdlog(
             "Scrape summary: "
             f"groups={stats['groups_seen']} "

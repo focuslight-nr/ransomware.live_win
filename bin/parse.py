@@ -10,6 +10,7 @@ import traceback
 from pathlib import Path
 from dotenv import dotenv_values
 from shared_utils import stdlog, errlog, screenshot
+import shared_utils
 import time
 import threading
 # For logging the time
@@ -217,7 +218,7 @@ def remove_lock_file():
         lock_file_path.unlink()
         stdlog("Previous lock removed.")
 
-def execute_main(file_path, execution_data, run_date):
+def execute_main(file_path, execution_data, run_date, results=None):
     """
     Dynamically imports a Python file, executes its `main` function, and logs execution time.
 
@@ -226,6 +227,23 @@ def execute_main(file_path, execution_data, run_date):
         execution_data (dict): Dictionary storing execution times.
         run_date (str): Date of script execution (YYYY-MM-DD).
     """
+    module_name = Path(file_path).stem
+    started = time.time()
+    errors = []
+    added = {}
+    original_errlog = shared_utils.errlog
+    original_hook = shared_utils.APPENDER_ADDED_HOOK
+
+    def record_error(message):
+        errors.append(str(message))
+        original_errlog(message)
+
+    def record_added(group_name):
+        added[group_name] = added.get(group_name, 0) + 1
+
+    shared_utils.errlog = record_error
+    shared_utils.APPENDER_ADDED_HOOK = record_added
+    status = "completed"
     try:
         module_name = os.path.splitext(os.path.basename(file_path))[0]
 
@@ -247,6 +265,7 @@ def execute_main(file_path, execution_data, run_date):
             module.main()
         else:
             errlog(f"File {file_path} does not have a callable main() function.")
+            status = "missing_main"
 
         end_time = time.time()
         execution_duration = round(end_time - start_time, 2)  # Time in seconds
@@ -258,7 +277,19 @@ def execute_main(file_path, execution_data, run_date):
         execution_data[run_date][module_name] = execution_duration
 
     except Exception as e:
+        status = "exception"
+        errors.append(str(e))
         errlog(f"Error executing {file_path}: {e}")
+    finally:
+        shared_utils.errlog = original_errlog
+        shared_utils.APPENDER_ADDED_HOOK = original_hook
+        if status == "completed" and errors:
+            status = "reported_error"
+        if results is not None:
+            results.append({"parser": module_name, "status": status,
+                            "duration_seconds": round(time.time() - started, 2),
+                            "victims_added": sum(added.values()),
+                            "groups_added": added, "errors": errors})
 
 def main():
     """
@@ -289,6 +320,7 @@ def main():
 
     # Generate execution date (static for the entire run)
     run_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+    results = []
 
     # Handle lock mechanism
     lock_file = None
@@ -320,10 +352,10 @@ def main():
             file_path = os.path.join(parsers_dir, f"{args.group}.py")
             if os.path.isfile(file_path):
                 stdlog(f"Parsing {Path(file_path).stem}...")
-                execute_main(file_path, execution_data, run_date)
+                execute_main(file_path, execution_data, run_date, results)
             elif os.path.isfile(os.path.join(parsers_dir, f"{args.group}-api.py")):
                 stdlog(f"Parsing {Path(file_path).stem} with API Parser...")
-                execute_main(os.path.join(parsers_dir, f"{args.group}-api.py"), execution_data, run_date)
+                execute_main(os.path.join(parsers_dir, f"{args.group}-api.py"), execution_data, run_date, results)
             else:
                 errlog(f"No file named {args.group}.py found in {parsers_dir}.")
         else:
@@ -337,9 +369,15 @@ def main():
             # Run each parser with counter
             for index, file_name in enumerate(parsers, start=1):
                 stdlog(f"[{index}/{total_parsers}] Parsing {Path(file_name).stem}...")
-                execute_main(os.path.join(parsers_dir, file_name), execution_data, run_date)
+                execute_main(os.path.join(parsers_dir, file_name), execution_data, run_date, results)
 
     finally:
+        result_path = tmp_dir / "parser-results.json"
+        temporary_path = result_path.with_suffix(".json.tmp")
+        temporary_path.write_text(json.dumps({"run_id": os.getenv("MAINTENANCE_RUN_ID"),
+                                              "finished_at": datetime.now().astimezone().isoformat(),
+                                              "parsers": results}, indent=2) + "\n", encoding="utf-8")
+        temporary_path.replace(result_path)
         if TOR_AUTO_MANAGE:
             stop_managed_tor()
 

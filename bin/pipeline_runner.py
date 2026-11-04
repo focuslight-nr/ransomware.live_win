@@ -70,17 +70,19 @@ def command_list(force: bool) -> list[list[str]]:
 
 
 def run(force: bool) -> int:
+    run_id = utc_now()
     write_state(
         pid=os.getpid(),
         status="running",
-        started_at=utc_now(),
+        started_at=run_id,
         finished_at=None,
         failed_command=None,
         return_code=None,
     )
     for command in command_list(force):
         write_state(current_command=command)
-        result = subprocess.run(command, cwd=ROOT, check=False)
+        result = subprocess.run(command, cwd=ROOT, check=False,
+                                env={**os.environ, "MAINTENANCE_RUN_ID": run_id})
         if result.returncode:
             write_state(
                 status="failed",

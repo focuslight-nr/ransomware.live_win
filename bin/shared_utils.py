@@ -810,6 +810,9 @@ def existingpost(post_title, group_name):
     return False
 
 
+APPENDER_ADDED_HOOK = None
+
+
 def appender(victim,group_name,description='',website='', published='', post_url='',country='',extra_infos=[]):
     with open(db_dir / 'victims.json', encoding='utf-8') as jsonfile:
         posts = json.load(jsonfile)
@@ -966,6 +969,8 @@ def appender(victim,group_name,description='',website='', published='', post_url
 
     with open(db_dir / 'victims.json', 'w', encoding='utf-8') as outfile:
         json.dump(posts, outfile, indent=4, ensure_ascii=False)
+    if APPENDER_ADDED_HOOK is not None:
+        APPENDER_ADDED_HOOK(group_name)
 
     victimtobluesky(victim,group_name,country)
     message = "<b>" + victim +  "</b> ("+ country + ") est victime du ransomware <b>" + group_name + "</b>"
