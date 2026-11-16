@@ -31,11 +31,12 @@ def main():
                 if not name:
                     continue
                 date = card.select_one("time")
+                published = date.get_text(strip=True).split("T", 1)[0] if date else ""
                 appender(
                     victim=name,
                     group_name=group,
                     post_url=urljoin(slug, link["href"]),
-                    published=date.get_text(strip=True) if date else "",
+                    published=published,
                 )
         except Exception as exc:
             errlog(f"{group} - parsing failed for {path.name}: {exc}")
